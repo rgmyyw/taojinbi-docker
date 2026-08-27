@@ -1,5 +1,6 @@
 import time
 import sys
+import os
 import random
 import io
 import re
@@ -515,6 +516,21 @@ def set_terminal_title(title):
 
 # 从已连接的设备中，返回用户选中的设备序列号
 def select_device():
+    # 多设备支持: 通过环境变量 TASK_DEVICE 固定设备(值为 adb serial, 如 192.168.1.100:5555),
+    # 跳过交互选择, 用于多台设备并行执行或无人值守场景:
+    #   TASK_DEVICE=192.168.1.100:5555 python main.py 淘金币
+    pinned = os.environ.get("TASK_DEVICE", "").strip()
+    if pinned:
+        devices = get_connected_devices()
+        if pinned not in devices and ":" in pinned:
+            # 无线设备掉线后 adb 会移除, 尝试自动重连一次
+            subprocess.run(["adb", "connect", pinned], capture_output=True, text=True)
+            devices = get_connected_devices()
+        if pinned not in devices:
+            raise Exception(f"TASK_DEVICE 指定的设备 {pinned} 未连接, 请先执行 adb connect {pinned}")
+        set_terminal_title(pinned)
+        return pinned
+
     # 获取所有连接的设备
     devices = get_connected_devices()
 

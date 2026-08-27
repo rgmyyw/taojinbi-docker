@@ -11,6 +11,7 @@ taojinbi-docker/
 ├── main.py            # 统一入口（推荐）
 ├── utils.py           # 公共库：设备选择 / 启动应用 / OCR / 模板匹配
 ├── img/               # OpenCV 模板图片
+├── dashboard/         # Web 仪表盘：设备管理 / 任务调度 / 日志
 ├── tasks/
 │   ├── taobao/        # 淘宝 / 天猫 常驻任务（含批量执行器）
 │   ├── events/        # 大促活动任务（双11 / 618）
@@ -32,16 +33,53 @@ python tasks/taobao/淘宝多任务执行.py # 按顺序批量执行多个任务
 
 入口会自动切换工作目录并配置 import 路径，在任意位置启动均可。
 
-## Docker 部署
+## 仪表盘
 
-参见 [AGENTS.md](AGENTS.md) 的 Docker 章节。常用命令：
+Web 管理界面(仅标准库实现, 无需额外依赖),包含设备管理、任务调度和日志:
 
 ```bash
-docker compose up -d --build                              # 构建并启动常驻容器
-adb connect <设备IP>:5555                                  # 无线连接设备
+python dashboard/app.py          # 默认 8080 端口, DASHBOARD_PORT 可覆盖
+```
+
+功能:
+
+- **设备管理**: 添加/移除 ADB 地址(ip:port 或 USB serial),后台每 5 秒轮询 `adb devices`,掉线的无线设备自动重连,实时显示在线/离线状态、品牌型号,USB 直连设备自动"发现"
+- **任务执行**: 从下拉框选择任务与设备一键启动(内部经 `main.py` + `TASK_DEVICE` 运行,支持多设备并行),可随时停止
+- **日志**: 每个任务一个日志文件(`logs/` 目录,页面按行实时增量显示),设备上下线与任务生命周期事件流
+
+注意: 服务无鉴权,仅限内网使用。
+
+## Docker 部署
+
+参见 [AGENTS.md](AGENTS.md) 的 Docker 章节。容器启动后**直接运行仪表盘**,浏览器打开 `http://<宿主机IP>:8080` 即可管理设备与任务:
+
+```bash
+docker compose up -d --build    # 构建并启动, 仪表盘监听 8080 (host 网络)
+```
+
+仍可命令行执行任务:
+
+```bash
 docker compose exec coin11-tb python /scripts/main.py      # 列出任务
 docker compose exec coin11-tb python /scripts/main.py 淘金币
 ```
+
+## 多设备
+
+连接多台设备后(无线: `adb connect <ip>:5555`,可多个),脚本会列出设备让你选择;也可用 `TASK_DEVICE` 环境变量固定设备,实现多台并行:
+
+```bash
+adb connect 192.168.1.100:5555
+adb connect 192.168.1.101:5555
+
+TASK_DEVICE=192.168.1.100:5555 python main.py 淘金币 &
+TASK_DEVICE=192.168.1.101:5555 python main.py 闲鱼扔骰子 &
+
+# Docker 容器内
+docker compose exec -e TASK_DEVICE=192.168.1.100:5555 coin11-tb python /scripts/main.py 淘金币
+```
+
+同一台设备不要同时跑多个任务(UI 会互相干扰),并行规则是"每台设备一个进程"。
 
 ## 使用教程
 

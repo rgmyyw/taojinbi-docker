@@ -19,5 +19,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# 任务型脚本容器: 保持进程存活, 便于 docker compose exec 进入容器执行任务脚本
-CMD ["sleep", "infinity"]
+# 仪表盘作为容器主进程: 管理设备/任务/日志, 页面与 API 均在 8080 端口
+EXPOSE 8080
+CMD ["python", "dashboard/app.py"]

@@ -18,6 +18,7 @@
 - 任务脚本按类目归档在 `tasks/` 下: `taobao/`(淘宝/天猫常驻)、`events/`(双11、618 等大促)、`alipay/`(支付宝)、`xianyu/`(闲鱼); 调试工具在 `tools/`
 - `main.py` 是统一入口: 自动切换到项目根目录(保证 `./img/*.png` 模板路径可用)并注入 import 路径(解析顶层 `utils` 与跨类目引用), 任务脚本内容不感知自身位置
 - `tasks/taobao/淘宝多任务执行.py` 按顺序批量执行多个任务, 自带同样的环境自举
+- `dashboard/` 是 Web 仪表盘(纯标准库): 设备管理(自动重连/上下线检测)、任务调度(子进程经 main.py + TASK_DEVICE 运行)、每任务日志文件与事件流; 启动 `python dashboard/app.py`, Docker 部署时是容器主进程(8080 端口)
 - 新增大促任务时放入对应类目目录即可, 无需修改入口
 
 ## 运行脚本
@@ -97,7 +98,7 @@ docker run -d \
 3. 在容器配置中添加设备: `/dev/bus/usb` 及其归属组
 4. 设置网络为 `host` 模式
 5. 挂载脚本目录和必要的系统路径
-6. 启动容器后，通过统一入口执行任务: `docker compose exec coin11-tb python /scripts/main.py 淘金币` (无参数可列出全部任务)
+6. 启动容器后主进程即仪表盘, 浏览器打开 `http://<宿主机IP>:8080` 管理设备与任务; 命令行仍可用 `docker compose exec coin11-tb python /scripts/main.py 淘金币`
 
 ### 普通电脑 (非 PVE) 部署
 
@@ -141,3 +142,33 @@ docker run -d \
 - 需要安卓设备支持无线调试（大多数现代安卓版本支持）
 - 首次启用必须有线连接，随后可自由拔除 USB
 - 如果设备重启，可能需要重新执行 `adb tcpip 5555` 和 `adb connect`
+
+## 多设备 (多台手机)
+
+`adb devices` 列出的每台设备(USB serial 或无线 `ip:5555`)都可以被脚本使用, `select_device()` 的行为:
+
+- **1 台**: 自动选择, 无交互
+- **多台且未设置 TASK_DEVICE**: 列出品牌/型号/系统版本, 输入序号选择
+- **设置了 TASK_DEVICE 环境变量**: 直接使用指定设备, 跳过交互(无线地址掉线时会自动 `adb connect` 重试一次)
+
+### 连接多台无线设备
+
+```bash
+# 每台设备首次需有线执行 adb tcpip 5555, 之后:
+adb connect 192.168.1.100:5555
+adb connect 192.168.1.101:5555
+adb devices   # 应列出全部设备
+```
+
+### 并行控制多台
+
+```bash
+# 本机: 两个进程各控一台
+TASK_DEVICE=192.168.1.100:5555 python main.py 淘金币 &
+TASK_DEVICE=192.168.1.101:5555 python main.py 闲鱼扔骰子 &
+
+# Docker 容器内
+docker compose exec -e TASK_DEVICE=192.168.1.100:5555 coin11-tb python /scripts/main.py 淘金币
+```
+
+`TASK_DEVICE` 会随环境传递给 `淘宝多任务执行.py` 的子进程。注意: **同一台设备不要同时跑多个任务**(UI 操作会互相干扰), 并行是"每台设备一个进程"。
