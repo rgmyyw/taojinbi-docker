@@ -6,9 +6,11 @@
 
 功能:
   - 设备管理: 维护一组 ADB 地址, 后台线程轮询 adb devices, 自动重连掉线的无线设备,
-    记录上线/下线事件与品牌型号
-  - 任务执行: 以子进程方式经 main.py 运行 tasks/ 下的脚本(TASK_DEVICE 固定设备),
-    stdout/stderr 实时写入 logs/ 下每任务一个日志文件
+    采集品牌/型号/系统版本/电量, 记录上线/下线事件
+  - 任务执行: 单发或批量(多任务 x 多设备, 每台设备按勾选顺序执行, 设备之间并行),
+    以子进程方式经 main.py 运行(TASK_DEVICE 固定设备), stdout/stderr 实时写入 logs/
+  - 历史: 任务记录持久化到 dashboard/data/history.json(保留 7 天),
+    支持按设备统计"今日执行情况"与异常中断检测(服务重启时未结束的任务标记为异常中断)
   - 日志系统: API 按行增量拉取任务日志; 设备/任务事件统一留存最近 200 条
 
 页面: dashboard/static/index.html (无构建, 浏览器轮询刷新)。
@@ -37,9 +39,12 @@ import main  # 复用 collect_scripts() 获取任务清单
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 DEVICES_FILE = os.path.join(DATA_DIR, "devices.json")
+HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 ADDRESS_RE = re.compile(r"^[A-Za-z0-9._:-]+$")  # ip:port 或 USB serial
+SERVER_STARTED_AT = time.time()
+ACTIVE_STATUSES = ("queued", "running")
 
 
 def adb_devices():
@@ -63,19 +68,23 @@ class DeviceManager:
 
     POLL_INTERVAL = 5
     CONNECT_TIMEOUT = 8
+    PROPS_REFRESH = 30  # 在线设备属性(电量等)刷新周期(秒)
 
     def __init__(self):
         self.lock = threading.Lock()
         self.configured = []
-        self.state = {}  # address -> {status, brand, model, last_seen, configured, since}
+        self.state = {}  # address -> {status, brand, model, android, battery, charging, ...}
         self.events = collections.deque(maxlen=200)
         self.adb_ok = True
+        self.adb_version = ""
+        self.last_refresh = 0.0
         self._stop = threading.Event()
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="adb")
         self._load()
+        self._detect_adb()
         threading.Thread(target=self._poll_loop, daemon=True, name="device-poll").start()
 
-    # ---- 持久化 ----
+    # ---- 持久化 / 启动检测 ----
 
     def _load(self):
         try:
@@ -92,6 +101,16 @@ class DeviceManager:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.configured, f, ensure_ascii=False, indent=2)
         os.replace(tmp, DEVICES_FILE)
+
+    def _detect_adb(self):
+        try:
+            out = subprocess.run(
+                ["adb", "version"], capture_output=True, text=True, timeout=6
+            ).stdout
+            m = re.search(r"version ([\d.]+)", out)
+            self.adb_version = m.group(1) if m else out.splitlines()[0][:40]
+        except Exception:
+            self.adb_version = ""
 
     # ---- 对外操作 ----
 
@@ -149,19 +168,31 @@ class DeviceManager:
             pass
 
     def _fetch_props(self, address):
-        def prop(name):
+        """采集品牌/型号/系统版本/电量(在线设备)。"""
+        def shell(cmd):
             try:
                 return subprocess.run(
-                    ["adb", "-s", address, "shell", "getprop", name],
+                    ["adb", "-s", address, "shell", cmd],
                     capture_output=True, text=True, timeout=6,
-                ).stdout.strip()
+                ).stdout
             except Exception:
                 return ""
-        brand, model = prop("ro.product.brand"), prop("ro.product.model")
+
+        lines = [l.strip() for l in
+                 shell("getprop ro.product.brand; getprop ro.product.model; getprop ro.build.version.release").splitlines()
+                 if l.strip()]
+        brand = lines[0] if len(lines) > 0 else ""
+        model = lines[1] if len(lines) > 1 else ""
+        android = lines[2] if len(lines) > 2 else ""
+        bat = shell("dumpsys battery")
+        m = re.search(r"^\s*level:\s*(\d+)", bat, re.M)
+        level = int(m.group(1)) if m else None
+        charging = bool(re.search(r"^\s*(?:USB|AC) powered:\s*true", bat, re.M))
         with self.lock:
             rec = self.state.get(address)
             if rec and rec.get("status") == "online":
-                rec["brand"], rec["model"] = brand, model
+                rec.update(brand=brand, model=model, android=android,
+                           battery=level, charging=charging, props_at=time.time())
 
     def refresh(self):
         current = adb_devices()
@@ -171,6 +202,7 @@ class DeviceManager:
             list(self._executor.map(self._try_connect, missing))
             current = adb_devices()
         now = time.time()
+        self.last_refresh = now
         need_props = []
         with self.lock:
             serials = set(current) | set(self.configured) | set(self.state)
@@ -182,7 +214,7 @@ class DeviceManager:
                     status = "online" if state == "device" else state
                     if status == "online":
                         rec["last_seen"] = now
-                        if not rec.get("brand"):
+                        if not rec.get("brand") or now - rec.get("props_at", 0) > self.PROPS_REFRESH:
                             need_props.append(s)
                 else:
                     status = "offline"
@@ -197,69 +229,201 @@ class DeviceManager:
 
 
 class TaskManager:
-    """以子进程方式执行任务并捕获日志。"""
+    """任务队列与执行: 每台设备一个工作线程顺序消费队列, 设备之间天然并行。
 
-    MAX_HISTORY = 50
+    状态机: queued -> running -> finished/failed/stopped;
+            queued -> cancelled(未开始即取消);
+            running -> interrupted(服务重启导致的异常中断, 加载历史时标记)。
+    """
+
+    KEEP_DAYS = 7
+    LIST_CAP = 100
 
     def __init__(self, devices):
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.devices = devices
         self.tasks = {}   # id -> 记录
-        self.order = []   # 按 started_at 新在前
+        self.order = []   # 新在前(按入队/启动时间)
+        self.queues = {}  # device -> [task_id, ...] FIFO
+        self._workers = {}  # device -> Thread
+        self._persist_lock = threading.Lock()  # 序列化历史文件写入, 避免并发损坏
+        self._load_history()
+
+    # ---- 历史持久化 ----
+
+    @staticmethod
+    def _public(rec):
+        return {k: v for k, v in rec.items() if not k.startswith("_")}
+
+    def _persist(self):
+        with self._persist_lock:
+            cutoff = time.time() - self.KEEP_DAYS * 86400
+            with self.lock:
+                recs = [self._public(r) for r in self.tasks.values()
+                        if (r.get("started_at") or r.get("queued_at") or 0) >= cutoff]
+            try:
+                os.makedirs(DATA_DIR, exist_ok=True)
+                tmp = f"{HISTORY_FILE}.{uuid.uuid4().hex[:6]}.tmp"  # 唯一临时文件, 防并发交错
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(recs, f, ensure_ascii=False)
+                os.replace(tmp, HISTORY_FILE)
+            except OSError:
+                pass
+
+    def _load_history(self):
+        try:
+            with open(HISTORY_FILE, encoding="utf-8") as f:
+                recs = json.load(f)
+        except (OSError, ValueError):
+            return
+        cutoff = time.time() - self.KEEP_DAYS * 86400
+        interrupted = 0
+        for rec in recs:
+            ts = rec.get("started_at") or rec.get("queued_at") or 0
+            if ts < cutoff:
+                continue
+            if rec.get("status") in ACTIVE_STATUSES:  # 上次服务退出时任务未正常结束
+                rec["status"] = "interrupted"
+                rec["returncode"] = None
+                interrupted += 1
+            self.tasks[rec["id"]] = rec
+        self.order = sorted(self.tasks, key=lambda i: -(self.tasks[i].get("started_at") or self.tasks[i].get("queued_at") or 0))
+        if interrupted:
+            self.devices._event(f"检测到上次异常中断的任务 {interrupted} 个")
+
+    # ---- 对外操作 ----
 
     def start(self, task_path, device=None):
         catalog = [disp for disp, _ in main.collect_scripts()]
         if task_path not in catalog:
             return None, "未知任务, 请从列表中选择"
         if device:
-            devices, _ = self.devices.snapshot()
-            if not any(d.get("address") == device and d.get("status") == "online" for d in devices):
-                return None, f"设备 {device} 不在线"
-
-        task_id = time.strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
-        safe = re.sub(r"[^0-9A-Za-z_.\u4e00-\u9fff]+", "_",
-                      f"{os.path.splitext(os.path.basename(task_path))[0]}_{device or 'auto'}")
-        log_path = os.path.join(LOG_DIR, f"{task_id}_{safe}.log")
-        os.makedirs(LOG_DIR, exist_ok=True)
-
-        env = os.environ.copy()
-        if device:
-            env["TASK_DEVICE"] = device
-        env["PYTHONUNBUFFERED"] = "1"  # 日志实时可见
-        proc = subprocess.Popen(
-            [sys.executable, "main.py", task_path],
-            cwd=BASE_DIR, env=env,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace",
-            start_new_session=True,  # 独立进程组, 便于整组停止
-        )
-        rec = {
-            "id": task_id, "task": task_path, "device": device or "自动",
-            "status": "running", "pid": proc.pid,
-            "started_at": time.time(), "ended_at": None,
-            "returncode": None, "log": log_path, "lines": 0,
-            "stop_requested": False, "_proc": proc,
-        }
+            ok, err = self._check_device(device)
+            if not ok:
+                return None, err
+        rec = self._new_record(task_path, device)
         with self.lock:
-            self.tasks[task_id] = rec
-            self.order.insert(0, task_id)
-        self.devices._event(f"任务开始 {os.path.basename(task_path)} @ {rec['device']}")
-        threading.Thread(target=self._pump, args=(rec,), daemon=True,
-                         name=f"task-{task_id}").start()
+            self.tasks[rec["id"]] = rec
+            self.order.insert(0, rec["id"])
+        self._persist()
+        threading.Thread(target=self._run_record, args=(rec,), daemon=True,
+                         name=f"task-{rec['id']}").start()
         return rec, None
 
-    def _pump(self, rec):
-        proc = rec["_proc"]
+    def start_batch(self, task_paths, devices):
+        catalog = [disp for disp, _ in main.collect_scripts()]
+        bad = [t for t in task_paths if t not in catalog]
+        if bad:
+            return 0, f"未知任务: {bad[0]}"
+        if not task_paths:
+            return 0, "未选择任务"
+        if not devices:
+            return 0, "未选择设备"
+        for device in devices:
+            ok, err = self._check_device(device)
+            if not ok:
+                return 0, err
+        created = 0
+        for device in devices:
+            for task_path in task_paths:
+                rec = self._new_record(task_path, device)
+                with self.lock:
+                    self.tasks[rec["id"]] = rec
+                    self.order.insert(0, rec["id"])
+                    self.queues.setdefault(device, []).append(rec["id"])
+                created += 1
+        self._persist()
+        names = [os.path.basename(t) for t in task_paths]
+        self.devices._event(f"批量入队 {created} 个任务 ({len(names)}项 x {len(devices)}台), 设备间并行")
+        for device in devices:
+            self._ensure_worker(device)
+        return created, None
+
+    def _check_device(self, device):
+        devs, _ = self.devices.snapshot()
+        if not any(d.get("address") == device and d.get("status") == "online" for d in devs):
+            return False, f"设备 {device} 不在线"
+        return True, None
+
+    def _new_record(self, task_path, device):
+        return {
+            "id": time.strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6],
+            "task": task_path,
+            "device": device or "自动",
+            "status": "queued",
+            "queued_at": time.time(),
+            "started_at": None, "ended_at": None,
+            "pid": None, "returncode": None,
+            "log": None, "lines": 0, "stop_requested": False,
+        }
+
+    def _ensure_worker(self, device):
+        with self.lock:
+            t = self._workers.get(device)
+            if t and t.is_alive():
+                return
+            t = threading.Thread(target=self._device_worker, args=(device,),
+                                 daemon=True, name=f"worker-{device}")
+            self._workers[device] = t
+            t.start()
+
+    def _device_worker(self, device):
+        while True:
+            with self.lock:
+                q = self.queues.get(device, [])
+                while q and self.tasks.get(q[0], {}).get("status") == "cancelled":
+                    q.pop(0)  # 跳过已取消的排队项
+                if not q:
+                    self.queues.pop(device, None)
+                    self._workers.pop(device, None)
+                    return
+                rec = self.tasks[q[0]]
+                q.pop(0)
+            self._run_record(rec)
+
+    def _run_record(self, rec):
+        task_path, device = rec["task"], rec["device"]
+        safe = re.sub(r"[^0-9A-Za-z_.\u4e00-\u9fff]+", "_",
+                      f"{os.path.splitext(os.path.basename(task_path))[0]}_{device}")
+        log_path = os.path.join(LOG_DIR, f"{rec['id']}_{safe}.log")
+        env = os.environ.copy()
+        if device != "自动":
+            env["TASK_DEVICE"] = device
+        env["PYTHONUNBUFFERED"] = "1"  # 日志实时可见
         try:
-            with open(rec["log"], "w", encoding="utf-8") as fh:
+            proc = subprocess.Popen(
+                [sys.executable, "main.py", task_path],
+                cwd=BASE_DIR, env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                start_new_session=True,  # 独立进程组, 便于整组停止
+            )
+        except OSError as e:
+            with self.lock:
+                rec.update(status="failed", returncode=-1, started_at=time.time(),
+                           ended_at=time.time(), error=str(e))
+            self._persist()
+            self.devices._event(f"任务启动失败 {os.path.basename(task_path)}: {e}")
+            return
+        with self.lock:
+            rec.update(status="running", pid=proc.pid,
+                       started_at=time.time(), log=log_path, _proc=proc)
+        self.devices._event(f"任务开始 {os.path.basename(task_path)} @ {device}")
+        self._persist()
+        try:
+            os.makedirs(LOG_DIR, exist_ok=True)
+            with open(log_path, "w", encoding="utf-8") as fh:
                 for line in proc.stdout:
                     fh.write(line)
                     fh.flush()
                     with self.lock:
                         rec["lines"] += 1
         except Exception as e:
-            with open(rec["log"], "a", encoding="utf-8") as fh:
-                fh.write(f"\n[日志写入异常] {e}\n")
+            try:
+                with open(log_path, "a", encoding="utf-8") as fh:
+                    fh.write(f"\n[日志写入异常] {e}\n")
+            except OSError:
+                pass
         rc = proc.wait()
         with self.lock:
             rec["returncode"] = rc
@@ -270,34 +434,35 @@ class TaskManager:
                 rec["status"] = "finished"
             else:
                 rec["status"] = "failed"
-            self._trim()
-        status_text = {"finished": "完成", "failed": f"失败(rc={rc})", "stopped": "已停止"}[rec["status"]]
-        self.devices._event(f"任务结束 {os.path.basename(rec['task'])} @ {rec['device']}: {status_text}")
-
-    def _trim(self):
-        finished = [tid for tid in self.order
-                    if self.tasks[tid]["status"] != "running"]
-        for tid in finished[self.MAX_HISTORY:]:
-            self.tasks.pop(tid, None)
-            self.order.remove(tid)
+        status_text = {"finished": "完成", "failed": f"失败(rc={rc})",
+                       "stopped": "已停止"}[rec["status"]]
+        self.devices._event(f"任务结束 {os.path.basename(task_path)} @ {device}: {status_text}")
+        self._persist()
 
     def stop(self, task_id):
+        """运行中 -> 终止进程组; 排队中 -> 取消。"""
         with self.lock:
             rec = self.tasks.get(task_id)
             if not rec:
                 return False, "任务不存在"
+            if rec["status"] == "queued":
+                rec["status"] = "cancelled"
+                self._persist()
+                self.devices._event(f"取消排队任务 {os.path.basename(rec['task'])} @ {rec['device']}")
+                return True, None
             if rec["status"] != "running":
                 return False, "任务已结束"
             rec["stop_requested"] = True
-            proc = rec["_proc"]
-        try:
-            if hasattr(os, "killpg"):
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            else:
-                proc.terminate()
-        except (ProcessLookupError, OSError):
-            pass  # 恰好已退出, 由 _pump 收尾
-        threading.Timer(5, self._force_kill, args=(proc,)).start()
+            proc = rec.get("_proc")
+        if proc:
+            try:
+                if hasattr(os, "killpg"):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                else:
+                    proc.terminate()
+            except (ProcessLookupError, OSError):
+                pass  # 恰好已退出, 由 _run_record 收尾
+            threading.Timer(5, self._force_kill, args=(proc,)).start()
         return True, None
 
     @staticmethod
@@ -314,36 +479,56 @@ class TaskManager:
     def stop_all(self):
         for tid in list(self.order):
             rec = self.tasks.get(tid)
-            if rec and rec["status"] == "running":
+            if rec and rec["status"] in ACTIVE_STATUSES:
                 self.stop(tid)
+
+    def running_count(self, device):
+        with self.lock:
+            return sum(1 for r in self.tasks.values()
+                       if r["device"] == device and r["status"] == "running")
 
     def list(self):
         with self.lock:
-            out = []
-            for tid in self.order:
-                rec = self.tasks[tid]
-                out.append({k: v for k, v in rec.items() if not k.startswith("_")})
+            out = [self._public(self.tasks[tid]) for tid in self.order[:self.LIST_CAP]]
             return out
 
     def get(self, task_id):
         with self.lock:
             rec = self.tasks.get(task_id)
-            return dict(rec) if rec else None
+            return self._public(rec) if rec else None
+
+    def today_summary(self):
+        """按设备统计今日执行情况: {device: {total, finished, failed, ...}}"""
+        today = time.strftime("%Y-%m-%d")
+        out = {}
+        with self.lock:
+            for r in self.tasks.values():
+                ts = r.get("started_at") or r.get("queued_at")
+                if not ts or time.strftime("%Y-%m-%d", time.localtime(ts)) != today:
+                    continue
+                dev = r["device"]
+                d = out.setdefault(dev, {"total": 0, "finished": 0, "failed": 0,
+                                         "interrupted": 0, "stopped": 0,
+                                         "running": 0, "queued": 0, "tasks": {}})
+                d["total"] += 1
+                if r["status"] in d:
+                    d[r["status"]] += 1
+                name = os.path.splitext(os.path.basename(r["task"]))[0]
+                d["tasks"].setdefault(name, []).append(r["status"])
+        return out
 
     def read_log(self, task_id, offset):
         rec = self.get(task_id)
         if not rec:
             return None
+        if not rec.get("log"):
+            return {"lines": [], "next": 0, "status": rec["status"]}
         try:
             with open(rec["log"], encoding="utf-8", errors="replace") as f:
                 lines = f.read().splitlines()
         except OSError:
             lines = []
-        return {
-            "lines": lines[offset:],
-            "next": len(lines),
-            "status": rec["status"],
-        }
+        return {"lines": lines[offset:], "next": len(lines), "status": rec["status"]}
 
 
 devices_mgr = DeviceManager()
@@ -381,7 +566,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlparse(self.path)
-        if url.path == "/" or url.path == "/index.html":
+        if url.path in ("/", "/index.html"):
             try:
                 with open(os.path.join(STATIC_DIR, "index.html"), "rb") as f:
                     body = f.read()
@@ -397,10 +582,20 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/state":
             devices, events = devices_mgr.snapshot()
             self._json({
-                "adb_ok": devices_mgr.adb_ok,
+                "server": {
+                    "started_at": SERVER_STARTED_AT,
+                    "now": time.time(),
+                    "port": int(os.environ.get("DASHBOARD_PORT", "11000")),
+                    "python": sys.version.split()[0],
+                    "adb_ok": devices_mgr.adb_ok,
+                    "adb_version": devices_mgr.adb_version or None,
+                    "poll_interval": DeviceManager.POLL_INTERVAL,
+                    "last_refresh": devices_mgr.last_refresh,
+                },
                 "devices": devices,
                 "events": events,
                 "tasks": tasks_mgr.list(),
+                "today": tasks_mgr.today_summary(),
                 "catalog": [disp for disp, _ in main.collect_scripts()],
             })
             return
@@ -412,7 +607,8 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError:
                 offset = 0
             result = tasks_mgr.read_log(task_id, offset)
-            self._json(result if result is not None else {"error": "任务不存在"}, 200 if result else 404)
+            self._json(result if result is not None else {"error": "任务不存在"},
+                       200 if result else 404)
             return
         self._json({"error": "not found"}, 404)
 
@@ -429,7 +625,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if url.path == "/api/tasks":
             rec, err = tasks_mgr.start(str(body.get("task", "")), body.get("device") or None)
-            self._json({"ok": rec is not None, **({"error": err} if err else {})}, 200 if rec else 400)
+            self._json({"ok": rec is not None, **({"error": err} if err else {})},
+                       200 if rec else 400)
+            return
+        if url.path == "/api/tasks/batch":
+            tasks = body.get("tasks") or []
+            devs = body.get("devices") or []
+            if not isinstance(tasks, list) or not isinstance(devs, list):
+                self._json({"ok": False, "error": "tasks/devices 必须为数组"}, 400)
+                return
+            created, err = tasks_mgr.start_batch([str(t) for t in tasks], [str(d) for d in devs])
+            self._json({"ok": not err, "created": created, **({"error": err} if err else {})},
+                       200 if not err else 400)
             return
         m = re.match(r"^/api/tasks/([A-Za-z0-9-]+)/stop$", url.path)
         if m:

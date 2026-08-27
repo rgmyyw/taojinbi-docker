@@ -6,110 +6,194 @@
 <title>淘金币任务面板</title>
 <style>
   :root {
-    --bg: #0f172a; --card: #1e293b; --card2: #253349; --border: #334155;
-    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
-    --green: #34d399; --red: #f87171; --amber: #fbbf24; --blue: #60a5fa; --gray: #64748b;
+    --bg: #f4f6f9; --card: #ffffff; --border: #e5e9f0; --border2: #d8dee8;
+    --text: #1f2937; --muted: #7b8698; --accent: #2563eb; --accent-soft: #eff6ff;
+    --green: #16a34a; --green-soft: #ecfdf5;
+    --red: #dc2626; --red-soft: #fef2f2;
+    --amber: #d97706; --amber-soft: #fffbeb;
+    --blue: #2563eb; --blue-soft: #eff6ff;
+    --gray: #6b7280; --gray-soft: #f3f4f6;
+    --shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  }
-  header {
-    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-    padding: 14px 20px; border-bottom: 1px solid var(--border);
-  }
-  header h1 { margin: 0; font-size: 18px; }
-  header .sub { color: var(--muted); font-size: 12px; }
-  main { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
-  .grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
-  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-  .card {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
-  }
-  .card h2 { margin: 0 0 10px; font-size: 15px; color: var(--accent); }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+
+  #conn-banner { display: none; background: var(--red-soft); color: var(--red);
+                 padding: 8px 20px; font-size: 13px; border-bottom: 1px solid #fecaca; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+           flex-wrap: wrap; padding: 14px 22px; background: var(--card);
+           border-bottom: 1px solid var(--border); }
+  header h1 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  header .sub { color: var(--muted); font-size: 12px; margin-left: 4px; }
+  .h-right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+
+  main { padding: 16px 22px 40px; max-width: 1280px; margin: 0 auto; }
+
+  /* 统计卡片 */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+           gap: 12px; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 12px 14px; box-shadow: var(--shadow); }
+  .stat-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+  .stat-value { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .stat-value small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .stat-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .card h2 { margin: 0 0 4px; font-size: 15px; }
+  .card .desc { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+
+  .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border);
+           white-space: nowrap; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   td.addr { font-family: ui-monospace, Menlo, monospace; }
-  .badge {
-    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
-  }
-  .b-green { background: rgba(52,211,153,.15); color: var(--green); }
-  .b-gray  { background: rgba(100,116,139,.2); color: var(--gray); }
-  .b-red   { background: rgba(248,113,113,.15); color: var(--red); }
-  .b-amber { background: rgba(251,191,36,.15); color: var(--amber); }
-  .b-blue  { background: rgba(96,165,250,.15); color: var(--blue); }
-  button, select, input {
-    background: var(--card2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 6px; padding: 5px 10px; font-size: 13px; vertical-align: middle;
-  }
+  tr.busy td { background: var(--blue-soft); }
+
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px;
+           font-weight: 500; }
+  .b-ok   { background: var(--green-soft); color: var(--green); }
+  .b-off  { background: var(--gray-soft); color: var(--gray); }
+  .b-fail { background: var(--red-soft); color: var(--red); }
+  .b-warn { background: var(--amber-soft); color: var(--amber); }
+  .b-run  { background: var(--blue-soft); color: var(--blue); }
+  .b-queue{ background: var(--gray-soft); color: #475569; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.green { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  .dot.red   { background: var(--red);   box-shadow: 0 0 0 3px var(--red-soft); }
+  .dot.gray  { background: var(--gray);  box-shadow: 0 0 0 3px var(--gray-soft); }
+  .dot.blue  { background: var(--blue);  box-shadow: 0 0 0 3px var(--blue-soft); }
+
+  button, select, input { background: #fff; color: var(--text); border: 1px solid var(--border2);
+                          border-radius: 7px; padding: 5px 11px; font-size: 13px; vertical-align: middle; }
   button { cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: #0369a1; border-color: #0284c7; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #1d4ed8; color: #fff; }
   button.danger { color: var(--red); }
   button.link { background: none; border: none; color: var(--accent); padding: 0 4px; }
+  button.link.danger { color: var(--red); }
+
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .row .grow { flex: 1; min-width: 160px; }
-  input.addr-input { width: 220px; font-family: ui-monospace, Menlo, monospace; }
-  #msg {
-    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
-    background: #7f1d1d; color: #fecaca; padding: 8px 16px; border-radius: 8px;
-    display: none; z-index: 9; font-size: 13px;
-  }
-  #events { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; }
+  input.addr-input { width: 230px; font-family: ui-monospace, Menlo, monospace; }
+
+  /* 批量执行: 任务/设备勾选 */
+  .exec-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .exec-grid { grid-template-columns: 1fr; } }
+  .pick { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+          max-height: 210px; overflow-y: auto; background: #fafbfd; }
+  .pick-group { font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+  .pick-group:first-child { margin-top: 0; }
+  .pick label { display: flex; align-items: center; gap: 6px; padding: 2px 2px;
+                cursor: pointer; font-size: 13px; }
+  .pick label:hover { color: var(--accent); }
+  .pick input[type=checkbox] { accent-color: var(--accent); margin: 0; }
+  .pick .tag { font-size: 11px; color: var(--blue); background: var(--blue-soft);
+               border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+  .pick-title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; display: flex;
+                justify-content: space-between; align-items: center; }
+  .pick-title .op { font-weight: 400; }
+
+  /* 服务详情 */
+  dl.svc { margin: 0; display: grid; grid-template-columns: 88px 1fr; gap: 6px 10px; font-size: 13px; }
+  dl.svc dt { color: var(--muted); }
+  dl.svc dd { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+
+  #events { list-style: none; margin: 0; padding: 0; max-height: 430px; overflow-y: auto; }
   #events li { padding: 4px 0; border-bottom: 1px dashed var(--border); font-size: 12.5px; }
-  #events li time { color: var(--muted); margin-right: 6px; font-family: ui-monospace, Menlo, monospace; }
-  #logbox {
-    background: #0b1120; border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 12px; height: 320px; overflow-y: auto;
-    font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all;
-  }
+  #events li time { color: var(--muted); margin-right: 6px;
+                    font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+
+  .filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--border2); background: #fff; border-radius: 999px;
+          padding: 2px 12px; font-size: 12.5px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  #logbox { background: #0d1117; color: #d5dde7; border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 12px; height: 320px; overflow-y: auto;
+            font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace;
+            white-space: pre-wrap; word-break: break-all; }
+
+  #msg { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+         background: var(--red); color: #fff; padding: 8px 16px; border-radius: 8px;
+         display: none; z-index: 9; font-size: 13px; box-shadow: var(--shadow); }
   .muted { color: var(--muted); }
-  .empty { color: var(--muted); padding: 10px 0; text-align: center; }
-  label.chk { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; }
+  .empty { color: var(--muted); padding: 12px 0; text-align: center; }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12.5px; }
 </style>
 </head>
 <body>
+<div id="conn-banner">⚠ 无法连接仪表盘服务, 正在重试…</div>
 <div id="msg"></div>
 <header>
-  <h1>淘金币任务面板</h1>
-  <span class="sub">设备自动重连 · 任务调度 · 日志</span>
-  <span class="sub" id="adb-state"></span>
+  <div>
+    <h1>📱 淘金币任务面板 <span class="sub">设备 · 任务 · 日志</span></h1>
+  </div>
+  <div class="h-right">
+    <span class="dot green" id="svc-dot"></span>
+    <span id="svc-text">服务运行中</span>
+    <span id="hdr-uptime"></span>
+  </div>
 </header>
 <main>
+  <section class="stats" id="stats-row"></section>
+
   <div class="grid">
     <div>
       <div class="card">
         <h2>设备</h2>
+        <div class="desc">添加的无线设备掉线后每 5 秒自动重连; USB 直连设备自动发现</div>
         <div class="row" style="margin-bottom:10px">
           <input class="addr-input" id="new-addr" placeholder="192.168.1.100:5555 或 USB serial">
           <button class="primary" onclick="addDevice()">添加设备</button>
-          <span class="muted">已添加的无线设备掉线后会每 5 秒自动重连</span>
         </div>
+        <div class="table-wrap">
         <table>
-          <thead><tr><th>地址</th><th>状态</th><th>品牌/型号</th><th>来源</th><th>状态变化</th><th></th></tr></thead>
-          <tbody id="dev-body"><tr><td colspan="6" class="empty">加载中…</td></tr></tbody>
+          <thead><tr><th>状态</th><th>地址</th><th>品牌 / 型号</th><th>系统</th><th>电量</th>
+            <th>今日执行</th><th>运行任务</th><th>最近在线</th><th>来源</th><th></th></tr></thead>
+          <tbody id="dev-body"><tr><td colspan="10" class="empty">加载中…</td></tr></tbody>
         </table>
+        </div>
       </div>
 
       <div class="card">
-        <h2>执行任务</h2>
-        <div class="row">
-          <select id="task-select" class="grow"></select>
-          <select id="device-select"></select>
-          <button class="primary" onclick="startTask()">启动</button>
+        <h2>批量执行</h2>
+        <div class="desc">勾选任务与设备 → 每台设备按勾选顺序依次执行, 设备之间并行; 建议避开低电量设备</div>
+        <div class="exec-grid">
+          <div>
+            <div class="pick-title">任务
+              <span class="op"><a href="#" class="link" onclick="checkAllTasks(true);return false">全选</a> ·
+              <a href="#" class="link" onclick="checkAllTasks(false);return false">清空</a></span></div>
+            <div class="pick" id="task-list"></div>
+          </div>
+          <div>
+            <div class="pick-title">设备 <span class="muted">(仅在线可选)</span></div>
+            <div class="pick" id="dev-list"></div>
+          </div>
         </div>
-        <div class="muted" style="margin-top:6px">同一台设备不要同时跑多个任务; "自动" 表示由脚本自行选择(单设备时免交互)。</div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" onclick="startBatch()">批量启动</button>
+          <span class="muted" id="batch-hint">未选择任务</span>
+        </div>
       </div>
 
       <div class="card">
         <h2>任务</h2>
+        <div class="filters" id="task-filters"></div>
+        <div class="table-wrap">
         <table>
-          <thead><tr><th>任务</th><th>设备</th><th>状态</th><th>开始</th><th>时长</th><th>操作</th></tr></thead>
-          <tbody id="task-body"><tr><td colspan="6" class="empty">暂无任务</td></tr></tbody>
+          <thead><tr><th>状态</th><th>任务</th><th>设备</th><th>开始</th><th>时长</th><th>结果</th><th>操作</th></tr></thead>
+          <tbody id="task-body"><tr><td colspan="7" class="empty">暂无任务</td></tr></tbody>
         </table>
+        </div>
       </div>
 
       <div class="card" id="log-card" style="display:none">
@@ -123,30 +207,46 @@
       </div>
     </div>
 
-    <div>
+    <aside>
+      <div class="card">
+        <h2>服务</h2>
+        <dl class="svc" id="svc-panel"></dl>
+      </div>
       <div class="card">
         <h2>事件</h2>
         <ul id="events"><li class="empty">暂无事件</li></ul>
       </div>
-    </div>
+    </aside>
   </div>
 </main>
 
 <script>
 let state = null;
-let selectedTask = null;   // {id, offset}
+let selectedTask = null;      // {id, offset}
+let taskFilter = "all";       // all | active | today | issues
+const checkedTasks = new Set();
+const checkedDevices = new Set();
 const $ = id => document.getElementById(id);
+
+const TASK_STATUS = {
+  queued:      ['排队中', 'b-queue'],
+  running:     ['运行中', 'b-run'],
+  finished:    ['已完成', 'b-ok'],
+  failed:      ['失败', 'b-fail'],
+  stopped:     ['已停止', 'b-off'],
+  interrupted: ['异常中断', 'b-fail'],
+  cancelled:   ['已取消', 'b-off'],
+};
+const GROUP_NAMES = { taobao: "淘宝/天猫", events: "大促活动", alipay: "支付宝", xianyu: "闲鱼", tools: "工具" };
+const FILTERS = [["all","全部"],["active","进行中"],["today","今日"],["issues","异常"]];
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 function hhmmss(ts) { return ts ? new Date(ts * 1000).toLocaleTimeString("zh-CN", {hour12:false}) : ""; }
-function dur(sec) {
-  sec = Math.max(0, Math.floor(sec));
-  const m = Math.floor(sec / 60), s = sec % 60;
-  return m ? `${m}分${s.toString().padStart(2,"0")}秒` : `${s}秒`;
-}
+function groupOf(d) { const m = d.match(/^(?:tasks|tools)\/([^/]+)\//); return GROUP_NAMES[m?.[1]] || "其他"; }
+function taskLabel(d) { return d.split("/").pop().replace(/\.py$/, ""); }
 function showMsg(text) {
   const el = $("msg");
   el.textContent = text; el.style.display = "block";
@@ -159,76 +259,198 @@ async function api(path, opts) {
   return data;
 }
 
-const GROUP_NAMES = { taobao: "淘宝/天猫", events: "大促活动", alipay: "支付宝", xianyu: "闲鱼", tools: "工具" };
-function groupOf(disp) {
-  const m = disp.match(/^(?:tasks|tools)\/([^/]+)\//);
-  return GROUP_NAMES[m?.[1]] || "其他";
+/* 以服务端时间基准计算相对时间, 避免客户端时钟偏差 */
+function nowTs() { return state?.server?.now || Date.now() / 1000; }
+function rel(ts) {
+  if (!ts) return "-";
+  const d = Math.max(0, nowTs() - ts);
+  if (d < 5) return "刚刚";
+  if (d < 60) return Math.floor(d) + " 秒前";
+  if (d < 3600) return Math.floor(d / 60) + " 分钟前";
+  if (d < 86400) return Math.floor(d / 3600) + " 小时前";
+  return Math.floor(d / 86400) + " 天前";
 }
-function taskLabel(disp) { return disp.split("/").pop().replace(/\.py$/, ""); }
+function dur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h ? `${h}时${m}分` : m ? `${m}分${s.toString().padStart(2,"0")}秒` : `${s}秒`;
+}
+function fmtUptime(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+  return d ? `${d}天${h}小时` : h ? `${h}小时${m}分` : `${m}分${Math.floor(sec % 60)}秒`;
+}
+
+/* ---------- 渲染 ---------- */
+
+function renderStats() {
+  const sv = state.server;
+  const online = state.devices.filter(d => d.status === "online");
+  const active = state.tasks.filter(t => t.status === "running");
+  const queued = state.tasks.filter(t => t.status === "queued");
+  const todayAll = Object.values(state.today || {});
+  const tSum = todayAll.reduce((a, x) => ({total: a.total + x.total, finished: a.finished + x.finished,
+    failed: a.failed + x.failed, interrupted: a.interrupted + x.interrupted}), {total:0, finished:0, failed:0, interrupted:0});
+  const adbOk = sv.adb_ok && sv.adb_version;
+  const uptime = nowTs() - sv.started_at;
+
+  const cards = [
+    { label: "服务状态", value: `<span class="dot green"></span> 运行中`, sub: `已运行 ${fmtUptime(uptime)}` },
+    { label: "ADB 环境", value: adbOk ? `<span class="dot green"></span> 正常`
+                                      : `<span class="dot red"></span> 异常`,
+      sub: adbOk ? `版本 ${sv.adb_version}` : "未检测到可用 adb" },
+    { label: "设备在线", value: `${online.length} <small>/ ${state.devices.length} 台</small>`,
+      sub: `${state.devices.filter(d => d.configured).length} 台已配置自动重连` },
+    { label: "运行中任务", value: `${active.length}`, sub: queued.length ? `另有 ${queued.length} 个排队中` : "无排队" },
+    { label: "今日执行", value: `${tSum.total} <small>次</small>`,
+      sub: tSum.failed || tSum.interrupted
+        ? `成功 ${tSum.finished} · <span style="color:var(--red)">异常 ${tSum.failed + tSum.interrupted}</span>`
+        : `成功 ${tSum.finished} · 无异常` },
+    { label: "设备轮询", value: `${sv.poll_interval}s <small>/ 次</small>`, sub: `上次刷新 ${rel(sv.last_refresh)}` },
+  ];
+  $("stats-row").innerHTML = cards.map(c =>
+    `<div class="stat"><div class="stat-label">${c.label}</div>
+     <div class="stat-value">${c.value}</div><div class="stat-sub">${c.sub}</div></div>`).join("");
+
+  $("hdr-uptime").textContent = `· 已运行 ${fmtUptime(uptime)}`;
+}
+
+function renderServicePanel() {
+  const sv = state.server;
+  const rows = [
+    ["状态", '<span style="color:var(--green)">● 运行中</span>'],
+    ["端口", sv.port],
+    ["Python", sv.python],
+    ["ADB", sv.adb_version ? "v" + sv.adb_version : "不可用"],
+    ["轮询间隔", sv.poll_interval + " 秒"],
+    ["上次刷新", rel(sv.last_refresh)],
+    ["启动时间", new Date(sv.started_at * 1000).toLocaleString("zh-CN", {hour12:false})],
+  ];
+  $("svc-panel").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+}
+
+function deviceTaskCount(addr) {
+  return state.tasks.filter(t => t.device === addr && t.status === "running").length;
+}
 
 function renderDevices() {
   const tbody = $("dev-body");
   if (!state.devices.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无设备, 请添加或连接</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">暂无设备, 请添加或用 USB 连接</td></tr>';
     return;
   }
   tbody.innerHTML = state.devices.map(d => {
-    const st = d.status === "online" ? '<span class="badge b-green">在线</span>'
-      : d.status === "offline" ? '<span class="badge b-gray">离线</span>'
-      : `<span class="badge b-amber">${esc(d.status)}</span>`;
-    const src = d.configured ? '<span class="badge b-blue">已配置</span>' : '<span class="badge b-gray">发现</span>';
+    const dot = d.status === "online" ? "green" : "gray";
+    const st = d.status === "online" ? "在线" : d.status === "offline" ? "离线" : esc(d.status);
+    const bat = d.battery == null ? "-" :
+      `<span style="color:${d.battery < 15 ? "var(--red)" : d.battery < 30 ? "var(--amber)" : "var(--green)"}">${d.battery}%</span>${d.charging ? "⚡" : ""}`;
+    const t = (state.today || {})[d.address];
+    let todayCell = '<span class="muted">未执行</span>', cls = "";
+    if (t) {
+      const bad = t.failed + t.interrupted;
+      const tip = Object.entries(t.tasks).map(([n, ss]) => `${n}: ${ss.join("/")}`).join("\n");
+      const badge = bad ? "b-fail" : (t.finished ? "b-ok" : "b-run");
+      const active = t.running + t.queued;
+      const parts = [t.finished && `✓${t.finished}`, bad && `✕${bad}`, active && `▶${active}`].filter(Boolean);
+      todayCell = `<span class="badge ${badge}" title="${esc(tip)}">${parts.join(" ") || t.total}</span>`;
+      if (bad) cls = 'style="background:var(--red-soft)"';
+    }
+    const busy = deviceTaskCount(d.address);
+    const src = d.configured ? '<span class="badge b-run">已配置</span>' : '<span class="badge b-off">发现</span>';
     const del = d.configured
       ? `<button class="link danger" onclick="removeDevice('${esc(d.address)}')">移除</button>` : "";
-    return `<tr>
-      <td class="addr">${esc(d.address)}</td><td>${st}</td>
-      <td>${esc(d.brand || "")} ${esc(d.model || "")}</td><td>${src}</td>
-      <td class="muted">${d.since ? hhmmss(d.since) : "-"}</td><td>${del}</td></tr>`;
+    return `<tr ${cls}>
+      <td><span class="dot ${dot}"></span> ${st}</td>
+      <td class="addr">${esc(d.address)}${busy ? ' <span class="tag badge b-run">任务中</span>' : ""}</td>
+      <td>${esc(d.brand || "")} ${esc(d.model || "")}</td>
+      <td class="muted">${d.android ? "Android " + esc(d.android) : "-"}</td>
+      <td>${bat}</td>
+      <td>${todayCell}</td>
+      <td>${busy || "-"}</td>
+      <td class="muted" title="${d.since ? new Date(d.since*1000).toLocaleString("zh-CN",{hour12:false}) : ""}">${d.status === "online" ? rel(d.last_seen) : rel(d.since) + " 变更"}</td>
+      <td>${src}</td><td>${del}</td></tr>`;
   }).join("");
 }
 
-function renderTaskForm() {
-  const tsel = $("task-select"), dsel = $("device-select");
-  const curT = tsel.value, curD = dsel.value;
+function renderPickers() {
+  /* 任务勾选(按类目分组), 设备勾选(仅在线) */
   const groups = {};
-  for (const disp of state.catalog) (groups[groupOf(disp)] ??= []).push(disp);
-  tsel.innerHTML = Object.entries(groups).map(([g, items]) =>
-    `<optgroup label="${esc(g)}">` +
-    items.map(d => `<option value="${esc(d)}">${esc(taskLabel(d))}</option>`).join("") +
-    `</optgroup>`).join("");
-  if (curT) tsel.value = curT;
+  for (const d of state.catalog) (groups[groupOf(d)] ??= []).push(d);
+  $("task-list").innerHTML = Object.entries(groups).map(([g, items]) =>
+    `<div class="pick-group">${esc(g)}</div>` +
+    items.map(d =>
+      `<label><input type="checkbox" value="${esc(d)}" ${checkedTasks.has(d) ? "checked" : ""}
+        onchange="toggleSet(checkedTasks,'${esc(d)}',this.checked);updateBatchHint()">
+       <span>${esc(taskLabel(d))}</span></label>`).join("")).join("");
+
   const online = state.devices.filter(d => d.status === "online");
-  dsel.innerHTML = '<option value="">自动</option>' +
-    online.map(d => `<option value="${esc(d.address)}">${esc(d.address)}</option>`).join("");
-  if (curD) dsel.value = curD;
+  $("dev-list").innerHTML = online.length ? online.map(d => {
+    const busy = deviceTaskCount(d.address);
+    return `<label><input type="checkbox" value="${esc(d.address)}" ${checkedDevices.has(d.address) ? "checked" : ""}
+      onchange="toggleSet(checkedDevices,'${esc(d.address)}',this.checked);updateBatchHint()">
+      <span class="addr" style="font-family:ui-monospace,Menlo,monospace">${esc(d.address)}</span>
+      ${busy ? '<span class="tag">任务中</span>' : ""}
+      <span class="muted">${esc(d.brand || "")} ${esc(d.model || "")}</span></label>`;
+  }).join("") : '<div class="empty" style="padding:4px 0">暂无在线设备</div>';
+  updateBatchHint();
 }
 
-const TASK_STATUS = {
-  running:  ['运行中', 'b-blue'],
-  finished: ['完成', 'b-green'],
-  failed:   ['失败', 'b-red'],
-  stopped:  ['已停止', 'b-gray'],
-};
+function toggleSet(set, key, on) { on ? set.add(key) : set.delete(key); }
+function checkAllTasks(on) {
+  checkedTasks.clear();
+  if (on) for (const d of state.catalog) checkedTasks.add(d);
+  renderPickers();
+}
+function updateBatchHint() {
+  const n = checkedTasks.size, m = checkedDevices.size;
+  $("batch-hint").textContent = n && m ? `已选 ${n} 个任务 x ${m} 台设备, 共 ${n * m} 项`
+    : n ? "请再勾选设备" : "未选择任务";
+}
+
+function isToday(t) {
+  return new Date((t.started_at || t.queued_at) * 1000).toDateString() === new Date(nowTs() * 1000).toDateString();
+}
+function taskPassesFilter(t) {
+  if (taskFilter === "active") return ["queued", "running"].includes(t.status);
+  if (taskFilter === "today") return isToday(t);
+  if (taskFilter === "issues") return ["failed", "interrupted"].includes(t.status);
+  return true;
+}
+function renderFilters() {
+  $("task-filters").innerHTML = FILTERS.map(([k, label]) =>
+    `<span class="chip ${taskFilter === k ? "on" : ""}" onclick="setFilter('${k}')">${label}</span>`).join("");
+}
+function setFilter(k) { taskFilter = k; renderFilters(); renderTasks(); }
+
 function renderTasks() {
   const tbody = $("task-body");
-  if (!state.tasks.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无任务</td></tr>';
+  const rows = state.tasks.filter(taskPassesFilter);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">${
+      state.tasks.length ? "当前筛选下无任务" : "暂无任务"}</td></tr>`;
     return;
   }
-  const now = Date.now() / 1000;
-  tbody.innerHTML = state.tasks.map(t => {
-    const [text, cls] = TASK_STATUS[t.status] || [t.status, "b-gray"];
-    const elapsed = (t.ended_at || now) - t.started_at;
-    const active = t.status === "running";
+  const now = nowTs();
+  tbody.innerHTML = rows.map(t => {
+    const [text, cls] = TASK_STATUS[t.status] || [t.status, "b-off"];
+    const st = t.status === "running" ? '<span class="badge b-run">运行中</span>'
+      : t.status === "queued" ? '<span class="badge b-queue">排队中</span>'
+      : `<span class="badge ${cls}">${text}</span>`;
+    const rc = t.returncode != null ? `rc=${t.returncode}` : "";
+    const startTs = t.started_at || t.queued_at;
+    const elapsed = t.status === "running" ? now - t.started_at
+                  : t.ended_at && t.started_at ? t.ended_at - t.started_at : null;
     const ops = [
       `<button class="link" onclick="viewLog('${t.id}')">日志</button>`,
-      active ? `<button class="link danger" onclick="stopTask('${t.id}')">停止</button>` : "",
+      ["queued", "running"].includes(t.status)
+        ? `<button class="link danger" onclick="stopTask('${t.id}')">${t.status === "queued" ? "取消" : "停止"}</button>` : "",
     ].join("");
     return `<tr>
+      <td>${st}</td>
       <td>${esc(taskLabel(t.task))}</td>
       <td class="addr">${esc(t.device)}</td>
-      <td><span class="badge ${cls}">${text}</span></td>
-      <td class="muted">${hhmmss(t.started_at)}</td>
-      <td class="muted">${dur(elapsed)}</td>
+      <td class="muted">${startTs ? hhmmss(startTs) : "-"}${t.queued_at && t.started_at ? " → " + hhmmss(t.started_at) : ""}</td>
+      <td class="muted">${elapsed != null ? dur(elapsed) : "-"}</td>
+      <td class="muted">${rc}</td>
       <td>${ops}</td></tr>`;
   }).join("");
 }
@@ -239,13 +461,20 @@ function renderEvents() {
     : '<li class="empty">暂无事件</li>';
 }
 
+/* ---------- 轮询 ---------- */
+
 async function pollState() {
   try {
     state = await api("/api/state");
-    $("adb-state").textContent = state.adb_ok ? "" : "⚠ 未检测到 adb 命令";
-    renderDevices(); renderTaskForm(); renderTasks(); renderEvents();
+    $("conn-banner").style.display = "none";
+    renderStats(); renderServicePanel(); renderDevices();
+    renderPickers(); renderFilters(); renderTasks(); renderEvents();
     if (selectedTask) pollLog();
-  } catch (e) { showMsg("刷新失败: " + e.message); }
+  } catch (e) {
+    $("conn-banner").style.display = "block";
+    $("svc-dot").className = "dot red";
+    $("svc-text").textContent = "服务连接失败";
+  }
 }
 
 async function pollLog() {
@@ -253,9 +482,8 @@ async function pollLog() {
     const data = await api(`/api/log?id=${encodeURIComponent(selectedTask.id)}&offset=${selectedTask.offset}`);
     if (data.lines.length) {
       const box = $("logbox");
-      // 控制体积: 只保留最近 2000 行
       const total = box.textContent ? box.textContent.split("\n").length + data.lines.length : data.lines.length;
-      if (total > 2000) box.textContent = "";
+      if (total > 2000) box.textContent = "";  // 控制体积: 只保留最近 2000 行
       box.textContent += data.lines.join("\n") + "\n";
       if ($("autoscroll").checked) box.scrollTop = box.scrollHeight;
     }
@@ -263,6 +491,8 @@ async function pollLog() {
     $("log-meta").textContent = `${data.next} 行 · ${TASK_STATUS[data.status]?.[0] || data.status}`;
   } catch (e) { showMsg("日志拉取失败: " + e.message); }
 }
+
+/* ---------- 操作 ---------- */
 
 async function addDevice() {
   const input = $("new-addr");
@@ -276,17 +506,20 @@ async function removeDevice(address) {
   try { await api(`/api/devices?address=${encodeURIComponent(address)}`, {method: "DELETE"}); pollState(); }
   catch (e) { showMsg(e.message); }
 }
-async function startTask() {
+async function startBatch() {
+  const tasks = [...checkedTasks], devices = [...checkedDevices];
+  if (!tasks.length) return showMsg("请先勾选要执行的任务");
+  if (!devices.length) return showMsg("请先勾选要执行的设备");
+  const busy = devices.filter(d => deviceTaskCount(d) > 0);
+  if (busy.length && !confirm(`设备 ${busy.join(", ")} 已有任务运行, 新任务将排队等待, 继续?`)) return;
   try {
-    await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({task: $("task-select").value, device: $("device-select").value || null}),
-    });
+    const r = await api("/api/tasks/batch", {method: "POST", body: JSON.stringify({tasks, devices})});
+    showMsg(`已入队 ${r.created} 个任务`);
     pollState();
   } catch (e) { showMsg(e.message); }
 }
 async function stopTask(id) {
-  if (!confirm("停止该任务?")) return;
+  if (!confirm("停止/取消该任务?")) return;
   try { await api(`/api/tasks/${id}/stop`, {method: "POST"}); pollState(); }
   catch (e) { showMsg(e.message); }
 }
