@@ -14,7 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /scripts
 
 COPY requirements.txt .
-# easyocr 会引入 torch, 镜像较大, 首次构建耗时较长属正常
+# 基础镜像自带 pip 较旧, 会误判 PyPI 新式规范化 whl 文件名(如 typing_extensions)为元数据不一致,
+# 丢 wheel 转源码构建导致失败, 故先升级 pip
+RUN pip install --no-cache-dir --upgrade pip
+# easyocr 依赖的 torch 若从默认 PyPI 解析会连带下载 nvidia/cudnn 等 CUDA 轮子(数 GB),
+# 宿主无 GPU 用不上; 从官方 CPU 源提供 +cpu 本地版本号, 同版本下优先于 PyPI 的 CUDA 轮子被选中
+RUN pip install --no-cache-dir torch==2.13.0 torchvision==0.28.0 \
+        --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
