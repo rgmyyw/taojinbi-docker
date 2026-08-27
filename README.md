@@ -38,7 +38,7 @@ python tasks/taobao/淘宝多任务执行.py # 按顺序批量执行多个任务
 Web 管理界面(仅标准库实现, 无需额外依赖),包含设备管理、任务调度和日志:
 
 ```bash
-python dashboard/app.py          # 默认 8080 端口, DASHBOARD_PORT 可覆盖
+python dashboard/app.py          # 默认 11000 端口, DASHBOARD_PORT 可覆盖
 ```
 
 功能:
@@ -51,10 +51,10 @@ python dashboard/app.py          # 默认 8080 端口, DASHBOARD_PORT 可覆盖
 
 ## Docker 部署
 
-参见 [AGENTS.md](AGENTS.md) 的 Docker 章节。容器启动后**直接运行仪表盘**,浏览器打开 `http://<宿主机IP>:8080` 即可管理设备与任务:
+参见 [AGENTS.md](AGENTS.md) 的 Docker 章节。容器启动后**直接运行仪表盘**,浏览器打开 `http://<宿主机IP>:11000` 即可管理设备与任务:
 
 ```bash
-docker compose up -d --build    # 构建并启动, 仪表盘监听 8080 (host 网络)
+docker compose up -d --build    # 构建并启动, 仪表盘监听 11000 (host 网络)
 ```
 
 仍可命令行执行任务:

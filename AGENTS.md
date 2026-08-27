@@ -18,7 +18,7 @@
 - 任务脚本按类目归档在 `tasks/` 下: `taobao/`(淘宝/天猫常驻)、`events/`(双11、618 等大促)、`alipay/`(支付宝)、`xianyu/`(闲鱼); 调试工具在 `tools/`
 - `main.py` 是统一入口: 自动切换到项目根目录(保证 `./img/*.png` 模板路径可用)并注入 import 路径(解析顶层 `utils` 与跨类目引用), 任务脚本内容不感知自身位置
 - `tasks/taobao/淘宝多任务执行.py` 按顺序批量执行多个任务, 自带同样的环境自举
-- `dashboard/` 是 Web 仪表盘(纯标准库): 设备管理(自动重连/上下线检测)、任务调度(子进程经 main.py + TASK_DEVICE 运行)、每任务日志文件与事件流; 启动 `python dashboard/app.py`, Docker 部署时是容器主进程(8080 端口)
+- `dashboard/` 是 Web 仪表盘(纯标准库): 设备管理(自动重连/上下线检测)、任务调度(子进程经 main.py + TASK_DEVICE 运行)、每任务日志文件与事件流; 启动 `python dashboard/app.py`, Docker 部署时是容器主进程(11000 端口)
 - 新增大促任务时放入对应类目目录即可, 无需修改入口
 
 ## 运行脚本
@@ -98,7 +98,7 @@ docker run -d \
 3. 在容器配置中添加设备: `/dev/bus/usb` 及其归属组
 4. 设置网络为 `host` 模式
 5. 挂载脚本目录和必要的系统路径
-6. 启动容器后主进程即仪表盘, 浏览器打开 `http://<宿主机IP>:8080` 管理设备与任务; 命令行仍可用 `docker compose exec coin11-tb python /scripts/main.py 淘金币`
+6. 启动容器后主进程即仪表盘, 浏览器打开 `http://<宿主机IP>:11000` 管理设备与任务; 命令行仍可用 `docker compose exec coin11-tb python /scripts/main.py 淘金币`
 
 ### 普通电脑 (非 PVE) 部署
 

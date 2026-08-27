@@ -19,6 +19,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# 仪表盘作为容器主进程: 管理设备/任务/日志, 页面与 API 均在 8080 端口
-EXPOSE 8080
+# 仪表盘作为容器主进程: 管理设备/任务/日志, 页面与 API 均在 11000 端口
+EXPOSE 11000
 CMD ["python", "dashboard/app.py"]

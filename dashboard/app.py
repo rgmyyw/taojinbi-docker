@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """设备与任务管理仪表盘 (仅标准库, 无额外依赖)。
 
-启动:  python dashboard/app.py    (默认 0.0.0.0:8080, 环境变量 DASHBOARD_PORT 可覆盖)
+启动:  python dashboard/app.py    (默认 0.0.0.0:11000, 环境变量 DASHBOARD_PORT 可覆盖)
 
 功能:
   - 设备管理: 维护一组 ADB 地址, 后台线程轮询 adb devices, 自动重连掉线的无线设备,
@@ -450,7 +450,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main_serve():
-    port = int(os.environ.get("DASHBOARD_PORT", "8080"))
+    port = int(os.environ.get("DASHBOARD_PORT", "11000"))
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     server.daemon_threads = True
     devices_mgr.refresh()  # 启动即取一次状态, 不等首个轮询周期
