@@ -181,6 +181,9 @@
         </div>
         <div class="row" style="margin-top:10px">
           <button class="primary" onclick="startBatch()">批量启动</button>
+          <label class="chk" style="color:var(--text)">失败自动重试
+            <select id="retry-select" title="任务失败后自动重试的次数"></select>
+          </label>
           <span class="muted" id="batch-hint">未选择任务</span>
         </div>
       </div>
@@ -372,7 +375,14 @@ function renderDevices() {
 }
 
 function renderPickers() {
-  /* 任务勾选(按类目分组), 设备勾选(仅在线) */
+  /* 任务勾选(按类目分组), 设备勾选(仅在线), 重试次数选择器 */
+  const rs = $("retry-select");
+  if (!rs.options.length) {
+    for (let i = 0; i <= 3; i++) {
+      rs.add(new Option(i === 0 ? "不重试" : `重试 ${i} 次`, i));
+    }
+    rs.value = state.server.default_retry ?? 1;
+  }
   const groups = {};
   for (const d of state.catalog) (groups[groupOf(d)] ??= []).push(d);
   $("task-list").innerHTML = Object.entries(groups).map(([g, items]) =>
@@ -446,7 +456,7 @@ function renderTasks() {
     ].join("");
     return `<tr>
       <td>${st}</td>
-      <td>${esc(taskLabel(t.task))}</td>
+      <td>${esc(taskLabel(t.task))}${t.retry_count ? ` <span class="badge b-warn" title="自动重试过 ${t.retry_count} 次">↻${t.retry_count}</span>` : ""}</td>
       <td class="addr">${esc(t.device)}</td>
       <td class="muted">${startTs ? hhmmss(startTs) : "-"}${t.queued_at && t.started_at ? " → " + hhmmss(t.started_at) : ""}</td>
       <td class="muted">${elapsed != null ? dur(elapsed) : "-"}</td>
@@ -513,7 +523,9 @@ async function startBatch() {
   const busy = devices.filter(d => deviceTaskCount(d) > 0);
   if (busy.length && !confirm(`设备 ${busy.join(", ")} 已有任务运行, 新任务将排队等待, 继续?`)) return;
   try {
-    const r = await api("/api/tasks/batch", {method: "POST", body: JSON.stringify({tasks, devices})});
+    const r = await api("/api/tasks/batch", {method: "POST", body: JSON.stringify({
+      tasks, devices, retry: parseInt($("retry-select").value, 10) || 0,
+    })});
     showMsg(`已入队 ${r.created} 个任务`);
     pollState();
   } catch (e) { showMsg(e.message); }

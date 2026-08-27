@@ -238,10 +238,14 @@ class TaskManager:
 
     KEEP_DAYS = 7
     LIST_CAP = 100
+    RETRY_DELAY = 10  # 失败后重试前的等待秒数
+    MAX_RETRY = 5
 
     def __init__(self, devices):
         self.lock = threading.RLock()
         self.devices = devices
+        # 失败自动重试的默认次数, 可用环境变量 DASHBOARD_TASK_RETRY 覆盖(0=不重试)
+        self.default_retry = self._norm_retry(os.environ.get("DASHBOARD_TASK_RETRY", "1"))
         self.tasks = {}   # id -> 记录
         self.order = []   # 新在前(按入队/启动时间)
         self.queues = {}  # device -> [task_id, ...] FIFO
@@ -293,7 +297,16 @@ class TaskManager:
 
     # ---- 对外操作 ----
 
-    def start(self, task_path, device=None):
+    @classmethod
+    def _norm_retry(cls, value):
+        """重试次数归一化: None->默认, 越界/非法->夹取到 [0, MAX_RETRY]。"""
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            n = 1
+        return max(0, min(cls.MAX_RETRY, n))
+
+    def start(self, task_path, device=None, retry=None):
         catalog = [disp for disp, _ in main.collect_scripts()]
         if task_path not in catalog:
             return None, "未知任务, 请从列表中选择"
@@ -301,16 +314,16 @@ class TaskManager:
             ok, err = self._check_device(device)
             if not ok:
                 return None, err
-        rec = self._new_record(task_path, device)
+        rec = self._new_record(task_path, device, retry)
         with self.lock:
             self.tasks[rec["id"]] = rec
             self.order.insert(0, rec["id"])
         self._persist()
-        threading.Thread(target=self._run_record, args=(rec,), daemon=True,
+        threading.Thread(target=self._run_with_retry, args=(rec,), daemon=True,
                          name=f"task-{rec['id']}").start()
         return rec, None
 
-    def start_batch(self, task_paths, devices):
+    def start_batch(self, task_paths, devices, retry=None):
         catalog = [disp for disp, _ in main.collect_scripts()]
         bad = [t for t in task_paths if t not in catalog]
         if bad:
@@ -326,7 +339,7 @@ class TaskManager:
         created = 0
         for device in devices:
             for task_path in task_paths:
-                rec = self._new_record(task_path, device)
+                rec = self._new_record(task_path, device, retry)
                 with self.lock:
                     self.tasks[rec["id"]] = rec
                     self.order.insert(0, rec["id"])
@@ -345,7 +358,7 @@ class TaskManager:
             return False, f"设备 {device} 不在线"
         return True, None
 
-    def _new_record(self, task_path, device):
+    def _new_record(self, task_path, device, retry=None):
         return {
             "id": time.strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6],
             "task": task_path,
@@ -355,6 +368,8 @@ class TaskManager:
             "started_at": None, "ended_at": None,
             "pid": None, "returncode": None,
             "log": None, "lines": 0, "stop_requested": False,
+            "retry_limit": self._norm_retry(retry) if retry is not None else self.default_retry,
+            "retry_count": 0,
         }
 
     def _ensure_worker(self, device):
@@ -379,7 +394,29 @@ class TaskManager:
                     return
                 rec = self.tasks[q[0]]
                 q.pop(0)
+            self._run_with_retry(rec)
+
+    def _run_with_retry(self, rec):
+        """执行任务; 失败且未用尽重试次数时, 等待后自动再试(同一记录, 日志累加)。"""
+        while True:
             self._run_record(rec)
+            with self.lock:
+                if rec["status"] != "failed":
+                    return
+                if rec.get("retry_count", 0) >= rec.get("retry_limit", 0):
+                    return
+                rec["retry_count"] += 1
+                rec["status"] = "queued"
+                attempt = rec["retry_count"] + 1
+                limit = rec["retry_limit"]
+            name = os.path.basename(rec["task"])
+            self.devices._event(
+                f"任务失败, {self.RETRY_DELAY}秒后自动重试(第{attempt}次尝试, 最多重试{limit}次): {name} @ {rec['device']}")
+            self._persist()
+            time.sleep(self.RETRY_DELAY)  # 期间该设备的后续任务顺延, 不影响其他设备
+            with self.lock:
+                if rec["status"] != "queued":  # 等待期间被用户取消
+                    return
 
     def _run_record(self, rec):
         task_path, device = rec["task"], rec["device"]
@@ -407,12 +444,16 @@ class TaskManager:
             return
         with self.lock:
             rec.update(status="running", pid=proc.pid,
-                       started_at=time.time(), log=log_path, _proc=proc)
+                       started_at=time.time(), ended_at=None, returncode=None,
+                       log=log_path, _proc=proc)
         self.devices._event(f"任务开始 {os.path.basename(task_path)} @ {device}")
         self._persist()
         try:
             os.makedirs(LOG_DIR, exist_ok=True)
-            with open(log_path, "w", encoding="utf-8") as fh:
+            mode = "a" if rec.get("retry_count") else "w"  # 重试的尝试追加到同一日志
+            with open(log_path, mode, encoding="utf-8") as fh:
+                if mode == "a":
+                    fh.write(f"\n===== 自动重试: 第 {rec['retry_count'] + 1} 次尝试 =====\n")
                 for line in proc.stdout:
                     fh.write(line)
                     fh.flush()
@@ -591,6 +632,7 @@ class Handler(BaseHTTPRequestHandler):
                     "adb_version": devices_mgr.adb_version or None,
                     "poll_interval": DeviceManager.POLL_INTERVAL,
                     "last_refresh": devices_mgr.last_refresh,
+                    "default_retry": tasks_mgr.default_retry,
                 },
                 "devices": devices,
                 "events": events,
@@ -624,7 +666,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok, **({"error": err} if err else {})}, 200 if ok else 400)
             return
         if url.path == "/api/tasks":
-            rec, err = tasks_mgr.start(str(body.get("task", "")), body.get("device") or None)
+            rec, err = tasks_mgr.start(str(body.get("task", "")), body.get("device") or None,
+                                       body.get("retry"))
             self._json({"ok": rec is not None, **({"error": err} if err else {})},
                        200 if rec else 400)
             return
@@ -634,7 +677,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(tasks, list) or not isinstance(devs, list):
                 self._json({"ok": False, "error": "tasks/devices 必须为数组"}, 400)
                 return
-            created, err = tasks_mgr.start_batch([str(t) for t in tasks], [str(d) for d in devs])
+            created, err = tasks_mgr.start_batch([str(t) for t in tasks], [str(d) for d in devs],
+                                                 body.get("retry"))
             self._json({"ok": not err, "created": created, **({"error": err} if err else {})},
                        200 if not err else 400)
             return
