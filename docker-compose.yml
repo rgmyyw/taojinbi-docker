@@ -1,0 +1,27 @@
+services:
+  coin11-tb:
+    # 镜像 yanghai/coin11-tb:latest 在 Docker Hub 上不存在(404),也没有提交过,
+    # 因此这里用 build 在目标机本地构建。首次部署:
+    #   docker compose up -d --build
+    # 构建后如需推送到镜像仓库供其他机器直接 pull:
+    #   docker push yanghai/coin11-tb:latest
+    build: .
+    image: yanghai/coin11-tb:latest
+    container_name: coin11-tb
+    restart: unless-stopped
+    network_mode: host
+    # 无线ADB模式: 移除 /dev/bus/usb 挂载, 改用网络连接
+    # 首次需通过有线 USB 运行 `adb tcpip 5555` 启用无线, 随后可拔除 USB
+    volumes:
+      # 整个项目挂载为 /scripts, 统一入口 python /scripts/main.py <任务名>
+      - .:/scripts
+    environment:
+      # 使容器内任意子目录脚本都能直接运行: 解析顶层 utils 与跨类目互相引用
+      - PYTHONPATH=/scripts:/scripts/tasks/taobao:/scripts/tasks/alipay:/scripts/tasks/xianyu:/scripts/tasks/events:/scripts/tools
+    # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
+    # 如需 GUI 显示, 取消下面两处注释:
+    # volumes 追加:
+    #   - /tmp/.X11-unix:/tmp/.X11-unix
+    # environment:
+    #   - DISPLAY=${DISPLAY}
+    shm_size: "1g"
