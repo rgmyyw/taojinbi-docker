@@ -512,7 +512,7 @@ async function addDevice() {
   catch (e) { showMsg(e.message); }
 }
 async function removeDevice(address) {
-  if (!confirm(`移除设备 ${address}? (仅移除自动重连配置, 不断开连接)`)) return;
+  if (!confirm(`移除设备 ${address}? (将断开连接并停止自动重连)`)) return;
   try { await api(`/api/devices?address=${encodeURIComponent(address)}`, {method: "DELETE"}); pollState(); }
   catch (e) { showMsg(e.message); }
 }

@@ -134,6 +134,14 @@ class DeviceManager:
             self.configured.remove(address)
             self._save()
             self.state.pop(address, None)
+        if ":" in address:
+            # 无线设备须同时断开 adb 传输: 传输仍在时 refresh() 会按
+            # "adb devices 里存在" 重新生成设备行, 表现为"移除不掉"
+            try:
+                subprocess.run(["adb", "disconnect", address],
+                               capture_output=True, text=True, timeout=6)
+            except Exception:
+                pass
         self._event(f"移除设备 {address}")
         self._executor.submit(self.refresh)
         return True, None
@@ -206,7 +214,12 @@ class DeviceManager:
         need_props = []
         with self.lock:
             serials = set(current) | set(self.configured) | set(self.state)
-            for s in serials:
+            for s in list(serials):
+                if s not in current and s not in self.configured:
+                    # 未配置且不在 adb 中的行不再保留(如已移除/已拔出的设备),
+                    # 否则会以"离线"状态永久残留在列表里
+                    self.state.pop(s, None)
+                    continue
                 rec = dict(self.state.get(s, {}))
                 prev_status = rec.get("status", "未知")
                 if s in current:
