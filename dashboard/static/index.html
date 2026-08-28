@@ -537,10 +537,17 @@ async function stopTask(id) {
 }
 function viewLog(id) {
   const t = state.tasks.find(t => t.id === id);
-  selectedTask = {id, offset: 0};
   $("log-card").style.display = "";
   $("log-title").textContent = t ? `${taskLabel(t.task)} @ ${t.device}` : "";
   $("logbox").textContent = "";
+  if (t && !t.log) {
+    // 排队中即被取消的任务从未启动, 没有日志文件, 明确提示而非空白
+    selectedTask = null;
+    $("logbox").textContent = "该任务未实际运行（排队中被取消），因此没有日志。";
+    $("log-meta").textContent = "";
+    return;
+  }
+  selectedTask = {id, offset: 0};
   pollLog();
 }
 function clearLogSelection() {
