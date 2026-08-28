@@ -191,6 +191,10 @@
       <div class="card">
         <h2>任务</h2>
         <div class="filters" id="task-filters"></div>
+        <select id="task-device-filter" onchange="setDeviceFilter(this.value)"
+                style="padding:4px 10px;border:1px solid var(--border);border-radius:14px;background:var(--card);color:var(--text);font-size:12px">
+          <option value="">全部设备</option>
+        </select>
         <div class="table-wrap">
         <table>
           <thead><tr><th>状态</th><th>任务</th><th>设备</th><th>开始</th><th>时长</th><th>结果</th><th>操作</th></tr></thead>
@@ -227,6 +231,7 @@
 let state = null;
 let selectedTask = null;      // {id, offset}
 let taskFilter = "all";       // all | active | today | issues
+let deviceFilter = "";        // "" 为全部设备, 否则为设备地址
 const checkedTasks = new Set();
 const checkedDevices = new Set();
 const $ = id => document.getElementById(id);
@@ -420,6 +425,7 @@ function isToday(t) {
   return new Date((t.started_at || t.queued_at) * 1000).toDateString() === new Date(nowTs() * 1000).toDateString();
 }
 function taskPassesFilter(t) {
+  if (deviceFilter && t.device !== deviceFilter) return false;
   if (taskFilter === "active") return ["queued", "running"].includes(t.status);
   if (taskFilter === "today") return isToday(t);
   if (taskFilter === "issues") return ["failed", "interrupted"].includes(t.status);
@@ -428,8 +434,23 @@ function taskPassesFilter(t) {
 function renderFilters() {
   $("task-filters").innerHTML = FILTERS.map(([k, label]) =>
     `<span class="chip ${taskFilter === k ? "on" : ""}" onclick="setFilter('${k}')">${label}</span>`).join("");
+  renderDeviceFilter();
 }
 function setFilter(k) { taskFilter = k; renderFilters(); renderTasks(); }
+function renderDeviceFilter() {
+  const sel = $("task-device-filter");
+  const addrs = [...new Set((state.devices || []).map(d => d.address))];
+  if (deviceFilter && !addrs.includes(deviceFilter)) {
+    deviceFilter = "";  // 被筛选的设备已移除, 回到全部
+  }
+  const sig = addrs.join("|");
+  if (sel.dataset.sig === sig) { sel.value = deviceFilter; return; }
+  sel.dataset.sig = sig;
+  sel.innerHTML = `<option value="">全部设备</option>` +
+    addrs.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
+  sel.value = deviceFilter;
+}
+function setDeviceFilter(v) { deviceFilter = v; renderTasks(); }
 
 function renderTasks() {
   const tbody = $("task-body");
