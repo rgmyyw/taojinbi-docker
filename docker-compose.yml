@@ -17,6 +17,8 @@ services:
       - .:/scripts
       # adb RSA 密钥持久化: 否则每次重建容器密钥重生成, 手机端授权全部失效
       - ./.adb:/root/.android
+      # easyocr 模型持久化: 否则每次重建容器后首个 OCR 任务要重新下载数十 MB 模型
+      - ./.easyocr:/root/.EasyOCR
     environment:
       # 使容器内任意子目录脚本都能直接运行: 解析顶层 utils 与跨类目互相引用
       - PYTHONPATH=/scripts:/scripts/tasks/taobao:/scripts/tasks/alipay:/scripts/tasks/xianyu:/scripts/tasks/events:/scripts/tools
