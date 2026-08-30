@@ -373,6 +373,12 @@ def task_loop(d, back_func, origin_app=TB_APP, is_fish=False, duration=22):
                         d.click(300, commodity_view2.center()[1])
                         time.sleep(18)
                         break
+                    commodity_view3 = d(className="android.view.View", resourceId="home-scroll-container")
+                    if commodity_view3.exists:
+                        print(f"commodity_view3，点击commodity_view3")
+                        d.click(commodity_view3.bounds()[0] + 100, commodity_view3.bounds()[1] + 700)
+                        time.sleep(18)
+                        break
                 if package_name == origin_app or package_name == TMALL_APP:
                     if package_name == ALIPAY_APP:
                         screen_image = d.screenshot(format='opencv')
