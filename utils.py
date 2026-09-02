@@ -738,6 +738,15 @@ def check_popup(d):
         if cancel_btn.exists:
             print("点击取消按钮")
             cancel_btn.click()
+            time.sleep(2)
+    verify_view = d(className="android.webkit.WebView", text="验证码拦截")
+    if verify_view.exists:
+        print("存在验证码拦截弹窗，尝试关闭")
+        close_btn = d.xpath("//android.webkit.WebView[@text='验证码拦截']/android.view.View/android.view.View[1]")
+        if close_btn.exists:
+            print("点击关闭按钮")
+            close_btn.click()
+            time.sleep(2)
 # find_button2(cv2.imread("screenshot.png"), "./img/alipay_get.png")
 
 
