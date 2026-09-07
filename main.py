@@ -5,14 +5,13 @@
 用法:
     python main.py                    # 列出全部任务
     python main.py 淘金币              # 模糊匹配并执行 tasks/taobao/淘金币任务.py
-    python main.py xianyu/闲鱼扔骰子.py # 以 类目/文件名 方式执行
+    python main.py taobao/淘金币任务.py # 以 类目/文件名 方式执行
 
-入口会自动完成两件事, 保证脚本内容零改动即可运行:
-    1. chdir 到项目根 —— 脚本内的 "./img/xxx.png" 相对路径不受启动位置影响;
-    2. 将项目根与各任务类目目录加入 sys.path/PYTHONPATH ——
-       使 `from utils import ...` 与跨类目引用(如 events 脚本导入 xianyu 的函数)均能解析,
-       且 subprocess 子进程同样继承该规则。
-仅依赖标准库, 可在没有安装第三方依赖的机器上用于 --list/--check。
+入口会自动完成两件事, 保证任务脚本零感知自身位置:
+    1. chdir 到项目根 —— 任务脚本以项目根为工作目录;
+    2. 将项目根与各任务类目目录加入 sys.path/PYTHONPATH,
+       subprocess 子进程同样继承该规则。
+仅依赖标准库, 可在没有安装第三方依赖的机器上用于 --list。
 """
 
 import os

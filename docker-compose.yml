@@ -20,8 +20,8 @@ services:
       # easyocr 模型持久化: 否则每次重建容器后首个 OCR 任务要重新下载数十 MB 模型
       - ./.easyocr:/root/.EasyOCR
     environment:
-      # 使容器内任意子目录脚本都能直接运行: 解析顶层 utils 与跨类目互相引用
-      - PYTHONPATH=/scripts:/scripts/tasks/taobao:/scripts/tasks/alipay:/scripts/tasks/xianyu:/scripts/tasks/events:/scripts/tools
+      # 使容器内任意子目录脚本都能直接运行: 解析顶层入口与任务目录
+      - PYTHONPATH=/scripts:/scripts/tasks/taobao
       # 容器以 root 运行, 避免在 bind mount 的仓库目录写出 root 属主的 __pycache__, 妨碍后续更新
       - PYTHONDONTWRITEBYTECODE=1
     # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
