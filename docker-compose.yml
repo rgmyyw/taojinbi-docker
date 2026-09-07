@@ -24,6 +24,10 @@ services:
       - PYTHONPATH=/scripts:/scripts/tasks/taobao
       # 容器以 root 运行, 避免在 bind mount 的仓库目录写出 root 属主的 __pycache__, 妨碍后续更新
       - PYTHONDONTWRITEBYTECODE=1
+      # 宿主总共 4 核, 引擎 torch/OCR 全核抢占会把仪表盘 HTTP 服务饿死(浏览器表现为"日志拉取失败"),
+      # 限制引擎线程数留出余量; 代价是 OCR 略慢, 属可接受权衡
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
     # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
     # 如需 GUI 显示, 取消下面两处注释:
     # volumes 追加:

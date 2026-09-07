@@ -431,6 +431,14 @@ class TaskManager:
                 if rec["status"] != "queued":  # 等待期间被用户取消
                     return
 
+    def _task_preexec():
+        # 任务子进程(引擎 OCR 吃满 CPU 会饿死仪表盘 HTTP 服务, 浏览器表现为"日志拉取失败")
+        # 降低调度优先级, CPU 争抢时让位于仪表盘与系统进程
+        try:
+            os.nice(5)
+        except OSError:
+            pass
+
     def _run_record(self, rec):
         task_path, device = rec["task"], rec["device"]
         safe = re.sub(r"[^0-9A-Za-z_.\u4e00-\u9fff]+", "_",
@@ -447,6 +455,7 @@ class TaskManager:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
                 start_new_session=True,  # 独立进程组, 便于整组停止
+                preexec_fn=self._task_preexec,
             )
         except OSError as e:
             with self.lock:
