@@ -1,7 +1,6 @@
 import time
 
 import uiautomator2 as u2
-from uiautomator2 import xpath
 
 from utils import check_chars_exist, get_current_app, select_device, task_loop, check_verify, start_app, TB_APP, check_popup, print_error, start_watcher, ALIPAY_APP
 

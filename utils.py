@@ -282,7 +282,7 @@ def majority_chinese(text):
 search_keys = ["华硕a豆air", "机械革命星耀14", "ipadmini7", "iphone16", "红米note13", "macbookairm4", "华硕灵耀14", "微星星影15"]
 
 
-def task_loop(d, back_func, origin_app=TB_APP, is_fish=False, duration=22):
+def task_loop(d, back_func, origin_app=TB_APP, is_fish=False, duration=22, only_scroll=False):
     check_can_open(d)
     package_name, _ = get_current_app(d)
     if "com.sina.weibo" in package_name:
@@ -319,7 +319,7 @@ def task_loop(d, back_func, origin_app=TB_APP, is_fish=False, duration=22):
     start_time = time.time()
     print("开始做任务。。。")
     browse_view = d(className="android.widget.TextView", textMatches=r"\d+/\d+")
-    if browse_view.exists:
+    if browse_view.exists and not only_scroll:
         fu_view = d(className="android.widget.TextView", textMatches=r"找\d+个福星得")
         if fu_view.exists:
             back_func()
@@ -372,6 +372,12 @@ def task_loop(d, back_func, origin_app=TB_APP, is_fish=False, duration=22):
                     if commodity_view2.exists:
                         print(f"存在commodity_view2，点击{(100, commodity_view2.center()[1])}")
                         d.click(300, commodity_view2.center()[1])
+                        time.sleep(18)
+                        break
+                    commodity_view3 = d(className="android.view.View", resourceId="home-scroll-container")
+                    if commodity_view3.exists:
+                        print(f"commodity_view3，点击commodity_view3")
+                        d.click(commodity_view3.bounds()[0] + 100, commodity_view3.bounds()[1] + 700)
                         time.sleep(18)
                         break
                 if package_name == origin_app or package_name == TMALL_APP:
@@ -748,6 +754,15 @@ def check_popup(d):
         if cancel_btn.exists:
             print("点击取消按钮")
             cancel_btn.click()
+            time.sleep(2)
+    verify_view = d(className="android.webkit.WebView", text="验证码拦截")
+    if verify_view.exists:
+        print("存在验证码拦截弹窗，尝试关闭")
+        close_btn = d.xpath("//android.webkit.WebView[@text='验证码拦截']/android.view.View/android.view.View[1]")
+        if close_btn.exists:
+            print("点击关闭按钮")
+            close_btn.click()
+            time.sleep(2)
 # find_button2(cv2.imread("screenshot.png"), "./img/alipay_get.png")
 
 
