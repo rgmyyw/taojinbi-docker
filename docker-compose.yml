@@ -28,6 +28,9 @@ services:
       # 限制引擎线程数留出余量; 代价是 OCR 略慢, 属可接受权衡
       - OMP_NUM_THREADS=2
       - MKL_NUM_THREADS=2
+      # 4 核宿主上 CPU OCR 慢, 默认单任务 1200s 跑不完一个浏览任务(实测 22min 超时 completed:0),
+      # 放宽到 1h/任务、1.5h/轮
+      - MAV_EXTRA=--task-timeout 3600 --run-timeout 5400
     # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
     # 如需 GUI 显示, 取消下面两处注释:
     # volumes 追加:
