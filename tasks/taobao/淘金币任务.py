@@ -1,213 +1,115 @@
-import time
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""淘金币任务入口 —— 以 engines/mav (taojinbi-Mav) 为主引擎。
 
-import uiautomator2 as u2
+上游原版脚本保留为同目录的 淘金币任务-legacy.py(部分场景已跑不动, 仅供对照)。
 
-from utils import check_chars_exist, other_app, get_current_app, select_device, task_loop, check_verify, start_app, TB_APP, check_popup, print_error, start_watcher
+本包装只做三件事(纯标准库, 任意 Python >= 3.8 可运行):
+  1. 找到 Python >= 3.11 的解释器运行引擎(Mav 引擎要求 3.11+):
+     优先级: 当前解释器 -> MAV_PYTHON 环境变量 -> PATH 中的 python3.11/3.12/3.13
+  2. 设备: 仪表盘/命令行通过 TASK_DEVICE 传入 adb serial, 转为引擎的 --serial;
+     未设置时若恰好只连了一台设备则自动使用, 否则报错退出
+  3. 调参(均可用环境变量覆盖):
+     MAV_TASK      search|hashtag|featured_goods|immersive, 留空=扫描全部已注册任务
+     MAV_MAX_TASKS 本轮最多执行几个任务(默认 1)
+     MAV_GPU       =1 时传 --gpu (Mac MPS/CUDA 环境)
+     MAV_EXTRA     透传给引擎的其他参数
+     MAV_SKIP_NAV  =1 跳过入场导航(默认会先把手机带到淘金币页面, 引擎为受控设计)
+"""
 
-unclick_btn = []
-have_clicked = dict()
-is_end = False
-error_count = 0
-in_other_app = False
-time1 = time.time()
-selected_device = select_device()
-d = u2.connect(selected_device)
-print(f"已成功连接设备：{selected_device}")
-start_app(d, TB_APP, init=True)
-screen_width, screen_height = d.window_size()
-ctx = start_watcher(d)
-time.sleep(3)
+import os
+import shutil
+import subprocess
+import sys
 
-
-def check_in_task():
-    package_name, activity_name = get_current_app(d)
-    if package_name == "com.taobao.taobao":
-        if "com.taobao.tao.welcome.Welcome" in activity_name:
-            find_coin_btn()
-            find_earn_btn()
-            return True
-        if "com.taobao.themis.container.app.TMSActivity" in activity_name:
-            coin_view = d(className="android.webkit.WebView", text="淘金币首页")
-            if coin_view.exists:
-                earn_btn1 = d(className="android.widget.TextView", text="赚金币抵钱")
-                earn_btn2 = d(className="android.widget.TextView", text="今日累计奖励")
-                if earn_btn1.exists or earn_btn2.exists:
-                    return True
-                else:
-                    earn_btn3 = d(className="android.widget.TextView", textContains="赚更多金币")
-                    if earn_btn3.exists:
-                        earn_btn3.click()
-                        time.sleep(3)
-                        return True
-                    eva_canvas = d(className="android.widget.Image", resourceId="eva-canvas")
-                    if eva_canvas.exists:
-                        d.click(eva_canvas.bounds()[0] + 150, eva_canvas.bounds()[3] - 150)
-                        time.sleep(3)
-                        return True
-    return False
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ENGINE_CLI = os.path.join(BASE_DIR, "engines", "mav", "scripts", "run_taojinbi.py")
+ENGINE_SRC = os.path.join(BASE_DIR, "engines", "mav", "src")
 
 
-def back_to_task():
-    print("开始返回任务页面")
-    while True:
-        try:
-            temp_package, temp_activity = get_current_app(d)
-            if temp_package is None or temp_activity is None or "Ext2ContainerActivity" in temp_activity:
-                continue
-            print(f"{temp_package}--{temp_activity}")
-            if TB_APP not in temp_package:
-                print(f"回到原始APP,{TB_APP}")
-                start_app(d, TB_APP)
-                jump_btn = d(resourceId="com.taobao.taobao:id/tv_close", text="跳过")
-                if jump_btn.exists:
-                    jump_btn.click()
-                    time.sleep(2)
-            else:
-                check_popup(d)
-                if check_in_task():
-                    print("当前是任务列表画面，不能继续返回")
-                    break
-                else:
-                    close_btn1 = d.xpath("//android.widget.FrameLayout[@resource-id='com.alipay.multiplatform.phone.xriver_integration:id/frameLayout_rightButton1']/android.widget.LinearLayout/android.widget.RelativeLayout/android.widget.RelativeLayout/android.widget.FrameLayout[2]")
-                    if close_btn1.exists:
-                        print("点击关闭小程序按钮")
-                        close_btn1.click()
-                        time.sleep(1)
-                        continue
-                    task_view = d.xpath('//android.widget.TextView[contains(@text, "限时下单任务")]')
-                    if task_view.exists:
-                        close_btn2 = d.xpath('//android.widget.TextView[contains(@text, "限时下单任务")]/preceding-sibling::android.view.View[1]')
-                        if close_btn2.exists:
-                            print("点击关闭限时下单任务按钮")
-                            close_btn2.click()
-                            time.sleep(1)
-                            continue
-                    print("点击后退")
-                    d.press("back")
-                    time.sleep(0.3)
-        except Exception:
-            print_error()
-
-
-def find_coin_btn():
-    coin_btn = d(classNameMatches=r"android.widget.FrameLayout|android.view.View", description="领淘金币")
-    if coin_btn.exists:
-        d.double_click(coin_btn[0].center()[0], coin_btn[0].center()[1])
-        time.sleep(5)
-    else:
-        d(className="android.view.View", description="搜索栏").click()
-        d(resourceId="com.taobao.taobao:id/searchEdit").send_keys("淘金币")
-        time.sleep(3)
-        d(className="android.view.View", descriptionContains="淘金币").click()
-        time.sleep(5)
-
-
-def find_earn_btn():
-    # 因2025双十一活动，需要回旧版本后继续任务
-    back_btn = d(className="android.widget.Button", textContains="回日常版")
-    if back_btn.exists(timeout=4):
-        back_btn.click()
-        time.sleep(3)
-    earn_btn = d(className="android.widget.TextView", textMatches="签到领金币|点击签到")
-    if earn_btn.exists(timeout=4):
-        earn_btn.click()
-        time.sleep(5)
-    more_btn = d(className="android.widget.TextView", textContains="赚更多金币")
-    if more_btn.exists(timeout=4):
-        more_btn.click()
-        time.sleep(3)
-    else:
-        raise Exception("没有找到金币任务按钮")
-    print("点击开始做任务")
-
-
-ctx.wait_stable()
-close_btn = d(className="android.widget.ImageView", description="关闭按钮")
-if close_btn and close_btn.exists:
-    close_btn.click()
-    time.sleep(3)
-find_coin_btn()
-find_earn_btn()
-finish_count = 0
-while True:
+def _probe_python(path):
+    """候选解释器必须 >= 3.11 且能 import lzma(部分自编译解释器缺 _lzma,
+    easyocr/torchvision 导入会失败, --help 探不出来)。"""
     try:
-        in_other_app = False
-        time.sleep(4)
-        check_verify(d)
-        check_popup(d)
-        earn_btn = d(className="android.widget.TextView", text="赚更多金币")
-        if earn_btn.exists and not d(className="android.widget.TextView", text="赚金币抵钱").exists:
-            earn_btn.click()
-            time.sleep(2)
+        out = subprocess.run(
+            [path, "-c", "import sys, lzma; print(sys.version_info.minor)"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return out.returncode == 0 and int(out.stdout.strip()) >= 11
+    except (OSError, ValueError):
+        return False
+
+
+def find_python():
+    """Mav 引擎要求 Python >= 3.11, 本包装自身可能在旧解释器中被启动。
+    优先级: MAV_PYTHON 显式指定 -> 当前解释器 -> PATH 中的 python3.11/3.12/3.13。"""
+    candidates = [os.environ.get("MAV_PYTHON")]
+    if sys.version_info >= (3, 11):
+        candidates.append(sys.executable)
+    candidates += ["python3.13", "python3.12", "python3.11"]
+    for name in candidates:
+        if not name:
             continue
-        draw_down_btn = d(className="android.widget.Button", text="立即领取")
-        if draw_down_btn.exists:
-            draw_down_btn.click()
-            time.sleep(2)
-        print("开始查找按钮。。。")
-        get_btn = d(className="android.widget.Button", text="领取奖励")
-        if get_btn.exists:
-            get_btn.click()
-            print("点击领取奖励")
-            time.sleep(2)
-            finish_count = finish_count + 1
-            # if finish_count % 20 == 0:
-            #     d.swipe_ext("up", scale=0.2)
-            #     time.sleep(4)
-            continue
-        de_btn = d(className="android.widget.Button", text="点击得")
-        if de_btn.exists:
-            de_btn.click()
-            print("点击点击得")
-            time.sleep(4)
-            continue
-        to_btn = d(className="android.widget.Button", textMatches="去完成|去逛逛|去浏览|逛一逛|立即领|去领取|去看看|搜一下|玩一把|捐一笔|逛一下")
-        if to_btn.exists:
-            need_click_view = None
-            need_click_index = 0
-            task_name = None
-            for index, view in enumerate(to_btn):
-                text_div = view.sibling(className="android.view.View", instance=0).child(className="android.widget.TextView", instance=0)
-                if text_div.exists:
-                    task_name = text_div.get_text()
-                    if check_chars_exist(task_name):
-                        if view not in unclick_btn:
-                            unclick_btn.append(view)
-                        continue
-                    if task_name in have_clicked:
-                        if have_clicked[task_name] >= 2:
-                            continue
-                    need_click_index = index
-                    need_click_view = view
-                    break
-            if need_click_view:
-                print("点击按钮", task_name)
-                if have_clicked.get(task_name) is None:
-                    have_clicked[task_name] = 1
-                else:
-                    have_clicked[task_name] += 1
-                if check_chars_exist(task_name, other_app):
-                    in_other_app = True
-                need_click_view.click()
-                time.sleep(3.5)
-                task_loop(d, back_to_task)
-            else:
-                error_count += 1
-                print("未找到可点击按钮", error_count)
-                if error_count >= 2:
-                    break
-        else:
-            error_count += 1
-            print("未找到可点击按钮", error_count)
-            if error_count >= 2:
-                break
-    except Exception as e:
-        print(e)
-        continue
-ctx.close()
-print(f"共自动化完成{finish_count}个任务")
-d.shell("settings put system accelerometer_rotation 0")
-print("关闭手机自动旋转")
-time2 = time.time()
-minutes, seconds = divmod(int(time2 - time1), 60)  # 同时计算分钟和秒
-print(f"共耗时: {minutes} 分钟 {seconds} 秒")
+        path = shutil.which(name) if not os.path.isabs(name) else name
+        if path and _probe_python(path):
+            return path
+    raise SystemExit(
+        "未找到可用的 Python >= 3.11 解释器(要求完整标准库, 含 lzma)。"
+        "请安装 3.11+ 或通过环境变量 MAV_PYTHON 指定解释器路径。"
+    )
+
+
+def resolve_serial():
+    serial = os.environ.get("TASK_DEVICE", "").strip()
+    if serial:
+        return serial
+    result = subprocess.run(["adb", "devices"], capture_output=True, text=True)
+    found = [l.split()[0] for l in result.stdout.splitlines()[1:] if l.strip().endswith("\tdevice")]
+    if len(found) == 1:
+        print(f"TASK_DEVICE 未设置, 自动使用唯一在线设备: {found[0]}")
+        return found[0]
+    raise SystemExit(
+        f"无法确定设备: TASK_DEVICE 未设置, 且当前在线设备数为 {len(found)}。"
+        "请在仪表盘勾选设备, 或设置 TASK_DEVICE=<serial>。"
+    )
+
+
+def main():
+    if not os.path.isfile(ENGINE_CLI):
+        raise SystemExit(f"引擎入口缺失: {ENGINE_CLI}")
+    python = find_python()
+    serial = resolve_serial()
+
+    cmd = [python, ENGINE_CLI, "--serial", serial, "--max-tasks", os.environ.get("MAV_MAX_TASKS", "1")]
+    task = os.environ.get("MAV_TASK", "").strip()
+    if task:
+        cmd += ["--task", task]
+    if os.environ.get("MAV_GPU") == "1":
+        cmd += ["--gpu"]
+    extra = os.environ.get("MAV_EXTRA", "").strip()
+    if extra:
+        cmd += extra.split()
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(
+        [ENGINE_SRC] + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p]
+    )
+
+    # 入场导航: Mav 引擎为受控设计, 需先确保手机在淘金币页面(MAV_SKIP_NAV=1 可跳过)
+    navigator = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_淘金币导航.py")
+    if os.environ.get("MAV_SKIP_NAV") != "1" and os.path.isfile(navigator):
+        print("=== 入场导航: 前往淘金币页面 ===")
+        sys.stdout.flush()
+        nav_result = subprocess.run([python, navigator, serial], cwd=BASE_DIR, env=env)
+        if nav_result.returncode != 0:
+            print("⚠ 导航未确认成功, 仍继续交给引擎尝试")
+
+    print(f"=== 淘金币(Mav 引擎) === 解释器: {python}")
+    print(f"执行: {' '.join(cmd[1:])}")
+    sys.stdout.flush()
+    result = subprocess.run(cmd, cwd=BASE_DIR, env=env)
+    raise SystemExit(result.returncode)
+
+
+if __name__ == "__main__":
+    main()

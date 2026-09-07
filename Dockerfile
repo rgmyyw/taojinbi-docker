@@ -1,5 +1,5 @@
-# easyocr 会引入最新 torch(要求 Python>=3.10), 故基础镜像用 3.10 而非 3.9
-FROM python:3.10-slim
+# easyocr 会引入最新 torch(要求 Python>=3.10), Mav 引擎要求 >=3.11, 故用 3.11
+FROM python:3.11-slim
 
 # 系统依赖:
 #   adb            - uiautomator2 与 Android 设备通信

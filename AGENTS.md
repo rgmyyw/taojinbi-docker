@@ -19,6 +19,7 @@
 - `main.py` 是统一入口: 自动切换到项目根目录(保证 `./img/*.png` 模板路径可用)并注入 import 路径(解析顶层 `utils` 与跨类目引用), 任务脚本内容不感知自身位置
 - `tasks/taobao/淘宝多任务执行.py` 按顺序批量执行多个任务, 自带同样的环境自举
 - `dashboard/` 是 Web 仪表盘(纯标准库): 设备管理(自动重连/上下线检测/电量与系统版本)、批量任务(多任务x多设备, 每台设备顺序执行、设备间并行, 失败自动重试)、任务历史持久化(7天, 按设备统计今日执行与异常中断)、每任务日志文件与事件流; 启动 `python dashboard/app.py`, Docker 部署时是容器主进程(11000 端口)
+- `engines/mav/` 是淘金币主引擎(vendored taojinbi-Mav, Python>=3.11); `tasks/taobao/淘金币任务.py` 是其包装入口: 先经 `_淘金币导航.py` 把手机带到淘金币页面, 再调引擎 CLI(设备由 TASK_DEVICE 传入, MAV_TASK/MAV_MAX_TASKS/MAV_GPU/MAV_SKIP_NAV 可调); 上游原版淘金币脚本已移除
 - 新增大促任务时放入对应类目目录即可, 无需修改入口
 
 ## 运行脚本

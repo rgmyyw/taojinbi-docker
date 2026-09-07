@@ -12,6 +12,7 @@ taojinbi-docker/
 ├── utils.py           # 公共库：设备选择 / 启动应用 / OCR / 模板匹配
 ├── img/               # OpenCV 模板图片
 ├── dashboard/         # Web 仪表盘：设备管理 / 任务调度 / 日志
+├── engines/mav/       # 淘金币主引擎 (taojinbi-Mav, Python>=3.11, 524个离线测试)
 ├── tasks/
 │   ├── taobao/        # 淘宝 / 天猫 常驻任务（含批量执行器）
 │   ├── events/        # 大促活动任务（双11 / 618）
@@ -50,6 +51,15 @@ python dashboard/app.py          # 默认 11000 端口, DASHBOARD_PORT 可覆盖
 - **日志**: 每个任务一个日志文件(`logs/` 目录,页面按行实时增量显示),设备上下线与任务生命周期事件流
 
 注意: 服务无鉴权,仅限内网使用。
+
+## 淘金币任务 (Mav 引擎)
+
+`tasks/taobao/淘金币任务.py` 以 [taojinbi-Mav](https://github.com/Linshi7766/taojinbi-Mav) 引擎为准(见 `engines/mav/`),修复了上游原版的进度不结算、浏览时长不计数等问题。运行要求与调参:
+
+- **Python >= 3.11**(完整标准库, 含 lzma);Docker 镜像已内置。本机若默认解释器不满足, 设置 `MAV_PYTHON=<3.11+解释器路径>`
+- 入口流程: 自动把手机导航到淘金币页面(`MAV_SKIP_NAV=1` 跳过)→ 引擎扫描并执行安全的浏览任务
+- 调参: `MAV_TASK=search|hashtag|featured_goods|immersive`(默认全部)、`MAV_MAX_TASKS=1`、`MAV_GPU=1`、`MAV_EXTRA="--dry-run"` 等
+- 引擎的结构化运行日志(JSONL)与任务日志一并落在 `logs/`
 
 ## Docker 部署
 
