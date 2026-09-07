@@ -102,6 +102,30 @@ def show_list(stream=sys.stdout):
     w("\n执行示例: python main.py 淘金币\n")
 
 
+def patch_task_device():
+    """TASK_DEVICE 指定设备时, 让裸写的 u2.connect() 也落在指定设备上。
+
+    不少任务脚本直接 `d = u2.connect()`, 不经 select_device()/TASK_DEVICE;
+    adb 里挂着多台设备(含掉线残留)时会抛 "more than one device",
+    只有一台时则可能默默控制到别的设备。这里在入口处拦截 adbutils 的
+    默认设备解析: 未显式给 serial 的一律改用 TASK_DEVICE。
+    """
+    dev = os.environ.get("TASK_DEVICE", "").strip()
+    if not dev:
+        return
+    try:
+        import adbutils
+    except ImportError:
+        return
+    client = adbutils.adb
+    orig = client.device
+
+    def device(serial=None):
+        return orig(serial) if serial else orig(dev)
+
+    client.device = device
+
+
 def main(argv):
     if not argv or argv == ["--list"] or argv == ["-l"]:
         show_list()
@@ -131,6 +155,7 @@ def main(argv):
         return 1
 
     bootstrap()
+    patch_task_device()
     print(f"=== 执行: {os.path.relpath(path, BASE_DIR)} ===")
     runpy.run_path(path, run_name="__main__")
     return 0

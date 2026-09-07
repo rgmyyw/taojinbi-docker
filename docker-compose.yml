@@ -15,9 +15,15 @@ services:
     volumes:
       # 整个项目挂载为 /scripts, 统一入口 python /scripts/main.py <任务名>
       - .:/scripts
+      # adb RSA 密钥持久化: 否则每次重建容器密钥重生成, 手机端授权全部失效
+      - ./.adb:/root/.android
+      # easyocr 模型持久化: 否则每次重建容器后首个 OCR 任务要重新下载数十 MB 模型
+      - ./.easyocr:/root/.EasyOCR
     environment:
       # 使容器内任意子目录脚本都能直接运行: 解析顶层 utils 与跨类目互相引用
       - PYTHONPATH=/scripts:/scripts/tasks/taobao:/scripts/tasks/alipay:/scripts/tasks/xianyu:/scripts/tasks/events:/scripts/tools
+      # 容器以 root 运行, 避免在 bind mount 的仓库目录写出 root 属主的 __pycache__, 妨碍后续更新
+      - PYTHONDONTWRITEBYTECODE=1
     # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
     # 如需 GUI 显示, 取消下面两处注释:
     # volumes 追加:
@@ -25,3 +31,6 @@ services:
     # environment:
     #   - DISPLAY=${DISPLAY}
     shm_size: "1g"
+    # OCR/torch 任务较吃内存, 与 openclaw 同档 2G 上限
+    mem_limit: 2g
+    pids_limit: 256
