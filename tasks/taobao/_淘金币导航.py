@@ -60,9 +60,9 @@ def nav_once(d):
 
 def main(serial):
     d = u2.connect(serial)
-    if on_coin_page(d):
-        print("已在淘金币页面")
-        return 0
+    # TMSActivity 是淘宝通用小程序容器, 搜索任务等子页同样运行在其中,
+    # "已在淘金币页面"判定不可靠(重试轮次会从上轮中断的子页起步),
+    # 因此每次统一冷启动, 从淘宝首页重新走导航
     print(f"启动淘宝 (serial={serial})")
     d.app_stop(TB)
     time.sleep(1)
