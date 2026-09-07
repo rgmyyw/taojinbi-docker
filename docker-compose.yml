@@ -31,6 +31,6 @@ services:
     # environment:
     #   - DISPLAY=${DISPLAY}
     shm_size: "1g"
-    # OCR/torch 任务较吃内存, 与 openclaw 同档 2G 上限
-    mem_limit: 2g
+    # Mav 引擎(CPU 版 torch+easyocr)实测峰值 ~2.1G, 2G 限额会被 cgroup OOM 杀掉, 留余量取 3G
+    mem_limit: 3g
     pids_limit: 256
