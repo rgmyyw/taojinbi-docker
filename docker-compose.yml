@@ -26,11 +26,11 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       # 宿主总共 4 核, 引擎 torch/OCR 全核抢占会把仪表盘 HTTP 服务饿死(浏览器表现为"日志拉取失败"),
       # 限制引擎线程数留出余量; 代价是 OCR 略慢, 属可接受权衡
-      - OMP_NUM_THREADS=2
+      - OMP_NUM_THREADS=3
       - MKL_NUM_THREADS=2
       # 4 核宿主上 CPU OCR 慢, 默认单任务 1200s 跑不完一个浏览任务(实测 22min 超时 completed:0),
       # 放宽到 1h/任务、1.5h/轮
-      - MAV_EXTRA=--task-timeout 3600 --run-timeout 5400
+      - MAV_EXTRA=--task-timeout 5400 --run-timeout 7200
     # uiautomator2 通过 ADB 截图, 脚本不依赖 X11, headless 部署无需挂载。
     # 如需 GUI 显示, 取消下面两处注释:
     # volumes 追加:
