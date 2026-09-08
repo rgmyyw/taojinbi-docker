@@ -14,8 +14,15 @@ import os
 import re
 import sys
 import time
+import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
+
+# CPU torch + easyocr 每轮 OCR 都会刷两条无害 UserWarning(quantize_per_tensor 弃用提示、
+# DataLoader pin_memory 无加速器提示),把仪表盘日志刷成"报错墙";按消息前缀精确屏蔽,
+# 其余警告不受影响。
+warnings.filterwarnings("ignore", category=UserWarning, message=r"torch\.quantize_per_tensor")
+warnings.filterwarnings("ignore", category=UserWarning, message=r"'pin_memory' argument is set as true")
 
 # src 布局 bootstrap：允许 `python scripts/run_taojinbi.py` 直接运行；
 # pip install -e . 后此插入无副作用。
