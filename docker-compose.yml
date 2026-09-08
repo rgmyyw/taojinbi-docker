@@ -38,6 +38,7 @@ services:
     # environment:
     #   - DISPLAY=${DISPLAY}
     shm_size: "1g"
-    # Mav 引擎(CPU 版 torch+easyocr)实测峰值 ~2.1G, 2G 限额会被 cgroup OOM 杀掉, 留余量取 3G
-    mem_limit: 3584m
+    # Mav 引擎(CPU 版 torch+easyocr)实测峰值 2.72G; 2026-09-08 曾上调 3.5G,
+    # 后因引擎不稳定按运维决定降至 2G(重 OCR 高峰可能触发 cgroup OOM, 需关注任务中断)
+    mem_limit: 2048m
     pids_limit: 256
