@@ -39,5 +39,5 @@ services:
     #   - DISPLAY=${DISPLAY}
     shm_size: "1g"
     # Mav 引擎(CPU 版 torch+easyocr)实测峰值 ~2.1G, 2G 限额会被 cgroup OOM 杀掉, 留余量取 3G
-    mem_limit: 3g
+    mem_limit: 3584m
     pids_limit: 256
