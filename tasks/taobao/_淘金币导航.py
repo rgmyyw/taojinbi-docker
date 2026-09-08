@@ -10,6 +10,7 @@ Mav 引擎是受控设计, 不负责从任意页面导航, 起点需在淘金币
 用法: python _淘金币导航.py <serial>   (退出码 0=已到达, 1=导航失败)
 """
 
+import subprocess
 import sys
 import time
 
@@ -19,17 +20,22 @@ TB = "com.taobao.taobao"
 ATTEMPTS = 3
 
 
-def wake_unlock(d):
+def screen_awake(serial):
+    """adb 直读电源状态。必须在 u2.connect 之前调用: 实测 connect 会唤醒屏幕。"""
+    try:
+        out = subprocess.run(["adb", "-s", serial, "shell", "dumpsys", "power"],
+                             capture_output=True, text=True, timeout=10).stdout
+        return "mWakefulness=Awake" in out
+    except Exception:
+        return False
+
+
+def wake_unlock(was_asleep, d):
     """入场前点亮屏幕并解除锁屏: 熄屏/锁屏状态下查不到任何 UI 元素, 导航必败。
     适用于无密码滑动锁设备; 设了 PIN 的机器 dismiss-keyguard 解不开, 需保持无安全锁。
-    屏幕已亮时这两条命令为无害空操作。"""
-    # 不用 d.info 的 screenOn: 实测熄屏瞬间它可能误报为已亮, dumpsys 判定可靠
-    try:
-        awake = "mWakefulness=Awake" in (d.shell("dumpsys power | grep mWakefulness=").output or "")
-    except Exception:
-        awake = False
-    if not awake:
-        print("屏幕熄灭, 点亮并解除锁屏")
+    u2.connect 只点屏不解锁, 故 WAKEUP + dismiss-keyguard 仍无条件执行(已亮屏时无害)。"""
+    if was_asleep:
+        print("屏幕熄灭, 点亮并解锁")
     d.shell("input keyevent KEYCODE_WAKEUP")
     time.sleep(1)
     d.shell("wm dismiss-keyguard")
@@ -76,8 +82,9 @@ def nav_once(d):
 
 
 def main(serial):
+    was_asleep = not screen_awake(serial)
     d = u2.connect(serial)
-    wake_unlock(d)
+    wake_unlock(was_asleep, d)
     # TMSActivity 是淘宝通用小程序容器, 搜索任务等子页同样运行在其中,
     # "已在淘金币页面"判定不可靠(重试轮次会从上轮中断的子页起步),
     # 因此每次统一冷启动, 从淘宝首页重新走导航
