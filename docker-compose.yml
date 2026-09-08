@@ -20,8 +20,8 @@ services:
       # easyocr 模型持久化: 否则每次重建容器后首个 OCR 任务要重新下载数十 MB 模型
       - ./.easyocr:/root/.EasyOCR
     environment:
-      # 使容器内任意子目录脚本都能直接运行: 解析顶层入口与任务目录
-      - PYTHONPATH=/scripts:/scripts/tasks/taobao
+      # 使容器内任意子目录脚本都能直接运行: 解析顶层 utils 与跨类目互相引用
+      - PYTHONPATH=/scripts:/scripts/tasks/taobao:/scripts/tasks/alipay:/scripts/tasks/xianyu:/scripts/tasks/events:/scripts/tools
       # 容器以 root 运行, 避免在 bind mount 的仓库目录写出 root 属主的 __pycache__, 妨碍后续更新
       - PYTHONDONTWRITEBYTECODE=1
       # 宿主总共 4 核, 引擎 torch/OCR 全核抢占会把仪表盘 HTTP 服务饿死(浏览器表现为"日志拉取失败"),
@@ -39,5 +39,5 @@ services:
     #   - DISPLAY=${DISPLAY}
     shm_size: "1g"
     # Mav 引擎(CPU 版 torch+easyocr)实测峰值 ~2.1G, 2G 限额会被 cgroup OOM 杀掉, 留余量取 3G
-    mem_limit: 3g
+    mem_limit: 3584m
     pids_limit: 256
