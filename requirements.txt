@@ -1,7 +1,4 @@
 uiautomator2==3.5.2
-uiautodev==0.14.0
 opencv-python==4.13.0.92
 easyocr==1.7.2
-pytesseract==0.3.13
-ddddocr==1.5.6
 # 注: torch/torchvision/numpy 由 easyocr 间接引入, 无需显式声明
