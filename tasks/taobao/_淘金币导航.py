@@ -23,11 +23,12 @@ def wake_unlock(d):
     """入场前点亮屏幕并解除锁屏: 熄屏/锁屏状态下查不到任何 UI 元素, 导航必败。
     适用于无密码滑动锁设备; 设了 PIN 的机器 dismiss-keyguard 解不开, 需保持无安全锁。
     屏幕已亮时这两条命令为无害空操作。"""
+    # 不用 d.info 的 screenOn: 实测熄屏瞬间它可能误报为已亮, dumpsys 判定可靠
     try:
-        screen_on = bool((d.info or {}).get("screenOn"))
+        awake = "mWakefulness=Awake" in (d.shell("dumpsys power | grep mWakefulness=").output or "")
     except Exception:
-        screen_on = False
-    if not screen_on:
+        awake = False
+    if not awake:
         print("屏幕熄灭, 点亮并解除锁屏")
     d.shell("input keyevent KEYCODE_WAKEUP")
     time.sleep(1)
