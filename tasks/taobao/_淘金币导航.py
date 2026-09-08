@@ -19,6 +19,22 @@ TB = "com.taobao.taobao"
 ATTEMPTS = 3
 
 
+def wake_unlock(d):
+    """入场前点亮屏幕并解除锁屏: 熄屏/锁屏状态下查不到任何 UI 元素, 导航必败。
+    适用于无密码滑动锁设备; 设了 PIN 的机器 dismiss-keyguard 解不开, 需保持无安全锁。
+    屏幕已亮时这两条命令为无害空操作。"""
+    try:
+        screen_on = bool((d.info or {}).get("screenOn"))
+    except Exception:
+        screen_on = False
+    if not screen_on:
+        print("屏幕熄灭, 点亮并解除锁屏")
+    d.shell("input keyevent KEYCODE_WAKEUP")
+    time.sleep(1)
+    d.shell("wm dismiss-keyguard")
+    time.sleep(1)
+
+
 def on_coin_page(d):
     cur = d.app_current() or {}
     return "TMSActivity" in (cur.get("activity") or "")
@@ -60,6 +76,7 @@ def nav_once(d):
 
 def main(serial):
     d = u2.connect(serial)
+    wake_unlock(d)
     # TMSActivity 是淘宝通用小程序容器, 搜索任务等子页同样运行在其中,
     # "已在淘金币页面"判定不可靠(重试轮次会从上轮中断的子页起步),
     # 因此每次统一冷启动, 从淘宝首页重新走导航
